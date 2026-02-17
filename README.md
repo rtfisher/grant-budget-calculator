@@ -34,7 +34,7 @@ Key parameters:
 | `fulltime_fringe` | Full-time employee fringe benefit rate | `0.4531` |
 | `inflation` | Annual salary/fee inflation rate | `0.03` |
 
-See [UMass Dartmouth Institutional Facts & Rates](https://www.umassd.edu/research/research-administration/institutional-facts--rates/) for current values.
+Consult with your institutional office of research administration for current rates.
 
 ## Budget Calculation Details
 
@@ -70,4 +70,4 @@ Claude (Anthropic) collaborated with rtfisher on refactoring and CI/CD integrati
 
 ## License
 
-Internal use.
+[MIT License](LICENSE)

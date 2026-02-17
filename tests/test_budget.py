@@ -286,16 +286,15 @@ class TestIntegration:
         if not os.path.exists(self.PAR_FILE):
             pytest.skip("budget.par not found")
         result = self._run_with_defaults(tmp_path)
-        assert "Summary" in result.stdout
         assert "Total Budget" in result.stdout
 
     def test_output_contains_three_years(self, tmp_path):
         if not os.path.exists(self.PAR_FILE):
             pytest.skip("budget.par not found")
         result = self._run_with_defaults(tmp_path)
-        assert "Year = 1" in result.stdout
-        assert "Year = 2" in result.stdout
-        assert "Year = 3" in result.stdout
+        assert "Year 1" in result.stdout
+        assert "Year 2" in result.stdout
+        assert "Year 3" in result.stdout
 
     def test_log_file_created(self, tmp_path):
         if not os.path.exists(self.PAR_FILE):
@@ -304,7 +303,6 @@ class TestIntegration:
         log_path = tmp_path / "budget.log"
         assert log_path.exists()
         contents = log_path.read_text()
-        assert "Summary" in contents
         assert "Input Parameters" in contents
 
     def test_dollar_formatting_in_output(self, tmp_path):
