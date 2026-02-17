@@ -44,6 +44,52 @@ Consult with your institutional office of research administration for current ra
 - **Inflation**: Applied at the end of each year to salaries, stipends, and fees for the following year.
 - **Indirect (F&A)**: Applied to MTDC plus the capped subaward amount.
 
+## Sample Output
+
+```
+Input Parameters
+---------------------------------
+  Number of years              = 3
+  Number of faculty            = 1
+  Faculty salary (year 1)      = $2,777.78
+  Graduate stipend             = $35,000.00
+  Graduate tuition + fees      = $12,415.00
+  Graduate health insurance    = $1,395.00
+  Undergraduate salary         = $5,000.00
+  Postdoc salary               = $75,000.00
+  Postdoc health               = $2,000.00
+  Travel                       = $5,000.00
+  Publication costs            = $1,000.00
+  Subawards                    = [0, 0, 0]
+  Indirect rate                = 0.59
+  Fringe (payroll tax) rate    = 0.0211
+  Full-time fringe rate        = 0.4531
+  Inflation rate               = 0.03
+
+
+                                          Year 1          Year 2          Year 3           Total
+------------------------------------------------------------------------------------------------
+                  Faculty Salary       $2,777.78       $2,861.11       $2,946.94       $8,585.83
+                  Faculty Fringe          $58.61          $60.37          $62.18         $181.16
+                 Graduate Salary      $35,000.00      $36,050.00      $37,131.50     $108,181.50
+                 Graduate Fringe         $184.62         $190.16         $195.87         $570.66
+                  Postdoc Salary      $75,000.00      $77,250.00      $79,567.50     $231,817.50
+                  Postdoc Fringe      $33,982.50      $35,001.97      $36,052.03     $105,036.51
+                   Total Postdoc     $110,982.50     $114,251.98     $117,619.53     $342,854.01
+            Undergraduate Salary       $5,000.00       $5,150.00       $5,304.50      $15,454.50
+                    Total Fringe      $34,331.24      $35,361.17      $36,422.01     $106,114.42
+   Graduate Tuition + Health Ins      $13,810.00      $14,224.30      $14,651.03      $42,685.33
+                          Travel       $5,000.00       $5,000.00       $5,000.00      $15,000.00
+               Publication Costs       $1,000.00       $1,000.00       $1,000.00       $3,000.00
+                        Subaward           $0.00           $0.00           $0.00           $0.00
+------------------------------------------------------------------------------------------------
+     Modified Total Direct Costs     $160,109.01     $164,672.28     $169,372.45     $494,153.75
+                        Indirect      $94,464.32      $97,156.65      $99,929.75     $291,550.71
+------------------------------------------------------------------------------------------------
+                    Total Direct     $173,919.01     $178,896.58     $184,023.48     $536,839.08
+                    Total Budget     $268,383.33     $276,053.23     $283,953.23     $828,389.79
+```
+
 ## Logging
 
 Each run appends a timestamped record to `budget.log` containing:
