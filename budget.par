@@ -1,0 +1,22 @@
+# budget.par — NSF Budget Calculator Parameters
+# Edit these values and re-run the script. Lines starting with # are ignored.
+
+# Institutional rates
+indirect_rate       = 0.59
+fringe_rate         = 0.0211
+fulltime_fringe     = 0.4531
+inflation           = 0.03
+
+# Default salaries and fees (used if you just press Enter at the prompt)
+faculty_base_salary = 100000
+faculty_months      = 0.25
+grad_stipend        = 26000
+grad_fees           = 12415
+grad_insurance      = 1395
+undergrad_salary    = 0
+postdoc_salary      = 0
+postdoc_health      = 0
+
+# Other defaults
+travel              = 2500
+pub_costs           = 0
