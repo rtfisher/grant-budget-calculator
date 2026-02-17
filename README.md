@@ -11,7 +11,6 @@ A terminal-based Python script for calculating research grant budgets with year-
 | `budget.py` | Main budget calculator script |
 | `budget.par` | Editable parameter file with institutional rates and default values |
 | `budget.log` | Append-only log of all runs (auto-generated) |
-| `budget_110724.py` | Original legacy script (kept for reference) |
 
 ## Quick Start
 
