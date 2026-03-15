@@ -225,6 +225,60 @@ class TestCalculateBudget:
         assert r["indirect"][0] == 0.0
         assert r["yearly"][0] == 0.0
 
+    def test_equipment_in_tdc_not_mtdc(self):
+        """Equipment should be included in TDC but excluded from MTDC."""
+        inputs = {**self.BASE_INPUTS, "equipment": 15000}
+        r = calculate_budget(**inputs)
+        r_no_equip = calculate_budget(**self.BASE_INPUTS)
+        # TDC increases by equipment amount
+        assert r["tdc"][0] == pytest.approx(r_no_equip["tdc"][0] + 15000)
+        # MTDC stays the same (equipment excluded)
+        assert r["mtdc"][0] == pytest.approx(r_no_equip["mtdc"][0])
+
+    def test_equipment_no_inflation(self):
+        """Equipment cost should be the same every year (no inflation)."""
+        inputs = {**self.BASE_INPUTS, "equipment": 10000}
+        r = calculate_budget(**inputs)
+        for d in r["details"]:
+            assert d["equipment"] == 10000
+
+    def test_equipment_default_zero(self):
+        """Equipment defaults to zero when not provided."""
+        r = calculate_budget(**self.BASE_INPUTS)
+        assert r["details"][0]["equipment"] == 0
+
+    def test_nasa_format_categories_sum(self):
+        """Verify NASA R&R category sums are internally consistent."""
+        inputs = {**self.BASE_INPUTS,
+                  "postdoc_salary": 60000, "postdoc_health": 3000,
+                  "undergrad_salary": 5000, "pub_costs": 1000,
+                  "equipment": 8000, "subaward": [30000, 0, 0]}
+        r = calculate_budget(**inputs)
+        d = r["details"][0]
+
+        # A. Senior/Key Person
+        senior_key = d["faculty_salary"] + d["faculty_fringe"]
+        # B. Other Personnel
+        other_personnel = (d["grad_salary"] + d["grad_fringe"]
+                           + d["postdoc_salary"] + d["postdoc_fringe"]
+                           + d["postdoc_health"]
+                           + d["undergrad_salary"] + d["undergrad_fringe"])
+        # Total Salary and Wages
+        assert senior_key + other_personnel == pytest.approx(
+            d["faculty_salary"] + d["faculty_fringe"]
+            + d["grad_salary"] + d["grad_fringe"]
+            + d["postdoc_salary"] + d["postdoc_fringe"] + d["postdoc_health"]
+            + d["undergrad_salary"] + d["undergrad_fringe"])
+        # F. Other Direct Costs
+        other_direct = d["pub_costs"] + d["subaward"] + d["grad_fees"] + d["grad_ins"]
+        # G. Direct Costs (A through F)
+        direct = (senior_key + other_personnel + d["equipment"]
+                  + d["travel"] + 0.0 + other_direct)
+        # I. Total Direct and Indirect
+        total_di = direct + d["indirect"]
+        # K. Budget Total = I + J (J=0 for grants)
+        assert total_di == pytest.approx(r["yearly"][0])
+
     def test_detail_years_are_one_indexed(self):
         r = calculate_budget(**self.BASE_INPUTS)
         assert r["details"][0]["year"] == 1
@@ -235,13 +289,14 @@ class TestCalculateBudget:
         inputs = {**self.BASE_INPUTS,
                   "postdoc_salary": 50000, "postdoc_health": 2000,
                   "undergrad_salary": 3000, "pub_costs": 500,
+                  "equipment": 8000,
                   "subaward": [10000, 0, 0]}
         r = calculate_budget(**inputs)
         d = r["details"][0]
         expected_tdc = (d["faculty_salary"] + d["grad_salary"] + inputs["grad_fees"]
                         + inputs["grad_ins"] + d["postdoc_salary"] + d["undergrad_salary"]
                         + d["travel"] + d["pub_costs"] + d["total_fringe"]
-                        + inputs["postdoc_health"] + d["subaward"])
+                        + inputs["postdoc_health"] + d["subaward"] + d["equipment"])
         assert r["tdc"][0] == pytest.approx(expected_tdc)
 
 
@@ -260,11 +315,10 @@ class TestIntegration:
         import shutil
         shutil.copy(self.PAR_FILE, str(tmpdir))
 
-        # 18 Enter presses: years, PIs, base salary, months, grad, fees, ins,
-        # undergrad, postdoc, postdoc_health, travel, pub, subaward,
+        # Enter presses: years, PIs, base salary, months, grad, fees, ins,
+        # undergrad, postdoc, postdoc_health, equipment, travel, pub, subaward,
         # indirect, fringe, fulltime_fringe, inflation
-        # (some prompts use two-line entry for subaward)
-        stdin_data = "\n" * 20
+        stdin_data = "\n" * 22
 
         result = subprocess.run(
             [sys.executable, self.SCRIPT],
@@ -312,6 +366,27 @@ class TestIntegration:
         # Output should contain dollar-formatted values
         assert "$" in result.stdout
 
+    def test_output_contains_nasa_format(self, tmp_path):
+        """Output should contain the NASA R&R budget format table."""
+        if not os.path.exists(self.PAR_FILE):
+            pytest.skip("budget.par not found")
+        result = self._run_with_defaults(tmp_path)
+        assert "NASA R&R Budget Format" in result.stdout
+        assert "A. Senior/Key Person" in result.stdout
+        assert "B. Other Personnel" in result.stdout
+        assert "G. Direct Costs (A through F)" in result.stdout
+        assert "H. Indirect Costs" in result.stdout
+        assert "K. Budget Total (I + J)" in result.stdout
+
+    def test_nasa_format_in_log(self, tmp_path):
+        """Log file should contain the NASA R&R budget format."""
+        if not os.path.exists(self.PAR_FILE):
+            pytest.skip("budget.par not found")
+        self._run_with_defaults(tmp_path)
+        log_contents = (tmp_path / "budget.log").read_text()
+        assert "NASA R&R Budget Format" in log_contents
+        assert "K. Budget Total (I + J)" in log_contents
+
     def test_log_contains_per_pi_details(self, tmp_path):
         """Log file should record each PI's base salary and summer months for reproducibility."""
         if not os.path.exists(self.PAR_FILE):
@@ -333,7 +408,7 @@ class TestIntegration:
             "",          # PI 1 months (default)
             "150000",    # PI 2 base salary
             "1.0",       # PI 2 months
-        ] + [""] * 14    # remaining prompts use defaults
+        ] + [""] * 16    # remaining prompts use defaults
 
         result = subprocess.run(
             [sys.executable, self.SCRIPT],
@@ -356,7 +431,7 @@ class TestIntegration:
         """Script should exit with error if budget.par is missing."""
         result = subprocess.run(
             [sys.executable, self.SCRIPT],
-            input="\n" * 20,
+            input="\n" * 22,
             capture_output=True,
             text=True,
             cwd=str(tmp_path),

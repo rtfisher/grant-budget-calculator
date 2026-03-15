@@ -44,12 +44,13 @@ SUBAWARD_INDIRECT_CAP = 25000
 
 def calculate_budget(number_years, faculty_salary, grad_salary, grad_fees, grad_ins,
                      undergrad_salary, postdoc_salary, postdoc_health, travel, pub_costs,
-                     subaward, indirect_rate, fringe_rate, fulltime_fringe, inflation):
+                     subaward, indirect_rate, fringe_rate, fulltime_fringe, inflation,
+                     equipment=0):
     """Calculate the year-by-year budget and return results as a dict.
 
     All salary/fee arguments are year-1 values; inflation is applied for
     subsequent years inside this function.  The subaward argument is a list
-    of length number_years.
+    of length number_years.  Equipment is a fixed yearly cost (no inflation).
 
     Returns a dict with keys:
         tdc, mtdc, indirect, yearly  — lists of length number_years
@@ -66,9 +67,9 @@ def calculate_budget(number_years, faculty_salary, grad_salary, grad_fees, grad_
 
         tdc[year] = (faculty_salary + grad_salary + grad_fees + grad_ins
                      + postdoc_salary + undergrad_salary + travel + pub_costs
-                     + fringe + postdoc_health + subaward[year])
+                     + fringe + postdoc_health + subaward[year] + equipment)
 
-        mtdc[year] = tdc[year] - grad_fees - grad_ins - subaward[year]
+        mtdc[year] = tdc[year] - grad_fees - grad_ins - subaward[year] - equipment
 
         indirect[year] = indirect_rate * mtdc[year]
 
@@ -86,10 +87,15 @@ def calculate_budget(number_years, faculty_salary, grad_salary, grad_fees, grad_
             "postdoc_fringe": postdoc_salary * fulltime_fringe,
             "total_postdoc": (1 + fulltime_fringe) * postdoc_salary + postdoc_health,
             "undergrad_salary": undergrad_salary,
+            "undergrad_fringe": undergrad_salary * fringe_rate,
             "total_fringe": fringe,
+            "grad_fees": grad_fees,
+            "grad_ins": grad_ins,
             "grad_tuition_health": grad_fees + grad_ins,
+            "postdoc_health": postdoc_health,
             "travel": travel,
             "pub_costs": pub_costs,
+            "equipment": equipment,
             "subaward": subaward[year],
             "subaward_mtdc": subaward_mtdc,
             "mtdc": mtdc[year],
@@ -184,11 +190,13 @@ def main():
     postdoc_salary = int(input(f"Enter postdoc salary [{d_postdoc}]: ") or d_postdoc)
     postdoc_health = int(input(f"Enter postdoc health [{d_phealth}]: ") or d_phealth)
 
-    # ── Travel and publication costs ─────────────────────────────────
+    # ── Equipment, travel, and publication costs ─────────────────────
 
+    d_equip = default("equipment")
     d_travel = default("travel")
     d_pub = default("pub_costs")
 
+    equipment = int(input(f"Enter yearly equipment costs [{d_equip}]: ") or d_equip)
     travel = int(input(f"Enter yearly travel costs [{d_travel}]: ") or d_travel)
     pub_costs = int(input(f"Enter yearly publication costs [{d_pub}]: ") or d_pub)
 
@@ -248,6 +256,7 @@ def main():
     log(f"  Undergraduate salary         = {dollar(undergrad_salary)}")
     log(f"  Postdoc salary               = {dollar(postdoc_salary)}")
     log(f"  Postdoc health               = {dollar(postdoc_health)}")
+    log(f"  Equipment                    = {dollar(equipment)}")
     log(f"  Travel                       = {dollar(travel)}")
     log(f"  Publication costs            = {dollar(pub_costs)}")
     log(f"  Subawards                    = {subaward}")
@@ -262,7 +271,8 @@ def main():
     results = calculate_budget(
         number_years, faculty_salary, grad_salary, grad_fees, grad_ins,
         undergrad_salary, postdoc_salary, postdoc_health, travel, pub_costs,
-        subaward, indirect_rate, fringe_rate, fulltime_fringe, inflation)
+        subaward, indirect_rate, fringe_rate, fulltime_fringe, inflation,
+        equipment)
 
     tdc = results["tdc"]
     indirect = results["indirect"]
@@ -283,6 +293,7 @@ def main():
         ("Undergraduate Salary",          "undergrad_salary"),
         ("Total Fringe",                  "total_fringe"),
         ("Graduate Tuition + Health Ins", "grad_tuition_health"),
+        ("Equipment",                     "equipment"),
         ("Travel",                        "travel"),
         ("Publication Costs",             "pub_costs"),
         ("Subaward",                      "subaward"),
@@ -327,6 +338,79 @@ def main():
         for d in details:
             if d["subaward_mtdc"] > 0:
                 log(f"  Note: Year {d['year']} subaward indirect (on first $25k) = {dollar(indirect_rate * d['subaward_mtdc'])}")
+
+    # ── NASA R&R Budget Format ─────────────────────────────────────
+
+    log()
+    log("=" * len(header))
+    log("NASA R&R Budget Format")
+    log("=" * len(header))
+
+    nasa_items = []
+    for y in range(number_years):
+        d = details[y]
+        senior_key = d["faculty_salary"] + d["faculty_fringe"]
+        other_personnel = (d["grad_salary"] + d["grad_fringe"]
+                           + d["postdoc_salary"] + d["postdoc_fringe"]
+                           + d["postdoc_health"]
+                           + d["undergrad_salary"] + d["undergrad_fringe"])
+        total_salary = senior_key + other_personnel
+        equip = d["equipment"]
+        trav = d["travel"]
+        participant = 0.0
+        other_direct = d["pub_costs"] + d["subaward"] + d["grad_fees"] + d["grad_ins"]
+        direct = total_salary + equip + trav + participant + other_direct
+        ind = d["indirect"]
+        total_di = direct + ind
+        fee = 0.0
+        budget_total = total_di + fee
+        nasa_items.append({
+            "senior_key": senior_key,
+            "other_personnel": other_personnel,
+            "total_salary": total_salary,
+            "equipment": equip,
+            "travel": trav,
+            "participant": participant,
+            "other_direct": other_direct,
+            "direct": direct,
+            "indirect": ind,
+            "total_di": total_di,
+            "fee": fee,
+            "budget_total": budget_total,
+        })
+
+    nasa_lines = [
+        ("A. Senior/Key Person",                "senior_key"),
+        ("B. Other Personnel",                  "other_personnel"),
+        ("Total Salary and Wages (A+B)",        "total_salary"),
+        ("C. Equipment Description",            "equipment"),
+        ("D. Travel",                           "travel"),
+        ("E. Participant/Trainee Support Costs", "participant"),
+        ("F. Other Direct Costs",               "other_direct"),
+        ("G. Direct Costs (A through F)",       "direct"),
+        ("H. Indirect Costs",                   "indirect"),
+        ("I. Total Direct and Indirect (G + H)", "total_di"),
+        ("J. Fee",                              "fee"),
+        ("K. Budget Total (I + J)",             "budget_total"),
+    ]
+
+    nasa_label_w = 40
+    nasa_header = (f"{'':>{nasa_label_w}}"
+                   + "".join(f"{'Year ' + str(y+1):>{col_w}}" for y in range(number_years))
+                   + f"{'Total':>{col_w}}")
+    nasa_sep = "-" * len(nasa_header)
+
+    def nasa_row(label, key):
+        vals = [n[key] for n in nasa_items]
+        cols = "".join(f"{dollar(v):>{col_w}}" for v in vals)
+        return f"{label:>{nasa_label_w}}{cols}{dollar(sum(vals)):>{col_w}}"
+
+    log()
+    log(nasa_header)
+    log(nasa_sep)
+    for label, key in nasa_lines:
+        log(nasa_row(label, key))
+    log(nasa_sep)
 
     logfile.write("\n")
     logfile.close()

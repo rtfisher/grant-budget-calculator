@@ -21,12 +21,18 @@ NSF-style grant budget calculator. Terminal-based interactive Python script that
 
 ## Budget math
 
-- **MTDC** = TDC - grad_fees - grad_insurance - subaward
+- **MTDC** = TDC - grad_fees - grad_insurance - subaward - equipment
 - **Indirect** = indirect_rate * MTDC + indirect_rate * min(subaward, $25k)
 - **Fringe** = (0.25 * grad_salary + undergrad_salary + faculty_salary) * fringe_rate + fulltime_fringe * postdoc_salary
 - The 0.25 factor is the grad summer fraction (3 months / 12) — only summer wages are subject to FICA.
 - "Total Fringe" is payroll-tax fringe only; postdoc health insurance is a separate line item.
+- Equipment is a fixed yearly cost excluded from MTDC (no inflation applied).
 - Inflation is applied at the end of each year to salaries, stipends, and fees.
+- Output includes both an NSF-style detailed table and a NASA R&R budget format summary.
+
+## TODO
+
+- Add NSF R&R budget format output (similar to NASA R&R format).
 
 ## Testing
 

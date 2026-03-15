@@ -19,5 +19,6 @@ postdoc_salary      = 0
 postdoc_health      = 0
 
 # Other defaults
+equipment           = 0
 travel              = 2500
 pub_costs           = 0

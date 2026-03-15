@@ -40,9 +40,17 @@ Consult with your institutional office of research administration for current ra
 - **Faculty salary**: Computed from 9-month base salary and number of summer months requested. Supports multiple PIs.
 - **Fringe**: Payroll tax (`fringe_rate`) applies to faculty summer salary, graduate student summer stipend (25% of annual), and undergraduate salary. Postdocs use the full-time fringe rate.
 - **Graduate students**: Annual stipend + tuition/fees + health insurance. Tuition/fees and health insurance are excluded from MTDC.
+- **Equipment**: Fixed yearly cost, excluded from MTDC (no inflation).
 - **Subawards**: Per-year amounts, excluded from MTDC. Indirect is charged on the first $25,000 of each year's subaward per NSF policy.
 - **Inflation**: Applied at the end of each year to salaries, stipends, and fees for the following year.
 - **Indirect (F&A)**: Applied to MTDC plus the capped subaward amount.
+
+## Output Formats
+
+The script produces two budget tables:
+
+1. **NSF-style detailed table** — Line-by-line breakdown of all salary, fringe, and cost components.
+2. **NASA R&R budget format** — Standard federal R&R categories (A–K): Senior/Key Person, Other Personnel, Equipment, Travel, Participant/Trainee Support, Other Direct Costs, Direct/Indirect totals, Fee, and Budget Total.
 
 ## Sample Output
 
