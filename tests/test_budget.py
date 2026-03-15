@@ -86,8 +86,8 @@ class TestCalculateBudget:
         number_years=3,
         faculty_salary=120000 / 9.0 * 0.25,  # 1 PI, 0.25 months
         grad_salary=26000,
-        grad_fees=12415.0,
-        grad_ins=1395.0,
+        grad_fees=14500.0,
+        grad_ins=1232.0,
         undergrad_salary=0,
         postdoc_salary=0,
         postdoc_health=0,
