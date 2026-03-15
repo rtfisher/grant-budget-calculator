@@ -51,6 +51,7 @@ Input Parameters
 ---------------------------------
   Number of years              = 3
   Number of faculty            = 1
+    PI 1: base 9-month salary = $100,000.00, summer months = 0.25, contribution = $2,777.78
   Faculty salary (year 1)      = $2,777.78
   Graduate stipend             = $35,000.00
   Graduate tuition + fees      = $12,415.00
@@ -94,6 +95,7 @@ Input Parameters
 
 Each run appends a timestamped record to `budget.log` containing:
 - All input parameters as entered
+- Per-PI base salary and summer months (for full reproducibility)
 - Year-by-year budget breakdown
 - Final summary totals
 

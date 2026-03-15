@@ -152,6 +152,7 @@ def main():
     # ── Salaries & Fees ──────────────────────────────────────────────
 
     faculty_salary = 0.0
+    pi_details = []
 
     d_base = default("faculty_base_salary")
     d_months = default("faculty_months")
@@ -161,7 +162,13 @@ def main():
         base_salary = int(input(f"  Enter base 9-month faculty salary [{d_base}]: ") or d_base)
         monthly_salary = base_salary / 9.0
         months_salary = float(input(f"  Enter number of summer months faculty salary [{d_months}]: ") or d_months)
-        faculty_salary += months_salary * monthly_salary
+        pi_contrib = months_salary * monthly_salary
+        faculty_salary += pi_contrib
+        pi_details.append({
+            "base_salary": base_salary,
+            "months": months_salary,
+            "contribution": pi_contrib,
+        })
 
     d_grad = default("grad_stipend")
     d_fees = default("grad_fees")
@@ -231,6 +238,9 @@ def main():
     log("---------------------------------")
     log(f"  Number of years              = {number_years}")
     log(f"  Number of faculty            = {number_pis}")
+    for i, pid in enumerate(pi_details):
+        log(f"    PI {i + 1}: base 9-month salary = {dollar(pid['base_salary'])}, "
+            f"summer months = {pid['months']}, contribution = {dollar(pid['contribution'])}")
     log(f"  Faculty salary (year 1)      = {dollar(faculty_salary)}")
     log(f"  Graduate stipend             = {dollar(grad_salary)}")
     log(f"  Graduate tuition + fees      = {dollar(grad_fees)}")

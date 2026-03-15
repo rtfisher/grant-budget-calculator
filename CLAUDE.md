@@ -17,7 +17,7 @@ NSF-style grant budget calculator. Terminal-based interactive Python script that
 - `load_parameters(path)` — Reads `budget.par` into a dict.
 - `dollar(amount)` — Formats floats as `$1,234.56`.
 - `calculate_budget(...)` — Pure function: takes all inputs, returns `{tdc, mtdc, indirect, yearly, details}` dict. No I/O. This is the testable core.
-- `main()` — Interactive wrapper: reads params, prompts user, calls `calculate_budget`, logs output.
+- `main()` — Interactive wrapper: reads params, prompts user, calls `calculate_budget`, logs output. Per-PI base salary and summer months are stored and logged for full reproducibility.
 
 ## Budget math
 

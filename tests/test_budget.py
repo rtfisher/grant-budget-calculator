@@ -95,8 +95,8 @@ class TestCalculateBudget:
         pub_costs=0,
         subaward=[0, 0, 0],
         indirect_rate=0.59,
-        fringe_rate=0.0211,
-        fulltime_fringe=0.4531,
+        fringe_rate=0.0221,
+        fulltime_fringe=0.3781,
         inflation=0.03,
     )
 
@@ -198,15 +198,15 @@ class TestCalculateBudget:
         r = calculate_budget(**inputs)
         d = r["details"][0]
         faculty = inputs["faculty_salary"]
-        expected_fringe = ((GRAD_SUMMER_FRACTION * 26000 + 5000 + faculty) * 0.0211
-                           + 0.4531 * 50000)
+        expected_fringe = ((GRAD_SUMMER_FRACTION * 26000 + 5000 + faculty) * 0.0221
+                           + 0.3781 * 50000)
         assert d["total_fringe"] == pytest.approx(expected_fringe)
 
     def test_postdoc_total(self):
         inputs = {**self.BASE_INPUTS, "postdoc_salary": 55000, "postdoc_health": 3000}
         r = calculate_budget(**inputs)
         d = r["details"][0]
-        expected = (1 + 0.4531) * 55000 + 3000
+        expected = (1 + 0.3781) * 55000 + 3000
         assert d["total_postdoc"] == pytest.approx(expected)
 
     def test_all_zeros(self):
@@ -216,7 +216,7 @@ class TestCalculateBudget:
             faculty_salary=0, grad_salary=0, grad_fees=0, grad_ins=0,
             undergrad_salary=0, postdoc_salary=0, postdoc_health=0,
             travel=0, pub_costs=0, subaward=[0],
-            indirect_rate=0.59, fringe_rate=0.0211, fulltime_fringe=0.4531,
+            indirect_rate=0.59, fringe_rate=0.0221, fulltime_fringe=0.3781,
             inflation=0.03,
         )
         r = calculate_budget(**inputs)
@@ -311,6 +311,46 @@ class TestIntegration:
         result = self._run_with_defaults(tmp_path)
         # Output should contain dollar-formatted values
         assert "$" in result.stdout
+
+    def test_log_contains_per_pi_details(self, tmp_path):
+        """Log file should record each PI's base salary and summer months for reproducibility."""
+        if not os.path.exists(self.PAR_FILE):
+            pytest.skip("budget.par not found")
+        import shutil
+        shutil.copy(self.PAR_FILE, str(tmp_path))
+
+        # 2 PIs: PI 1 uses defaults, PI 2 uses custom values
+        params = load_parameters(self.PAR_FILE)
+        d_base = params.get("faculty_base_salary", "120000")
+        d_months = params.get("faculty_months", "0.25")
+
+        # years=3, PIs=2, PI1 base(default), PI1 months(default),
+        # PI2 base=150000, PI2 months=1.0, then defaults for everything else
+        stdin_lines = [
+            "",          # years (default 3)
+            "2",         # 2 PIs
+            "",          # PI 1 base salary (default)
+            "",          # PI 1 months (default)
+            "150000",    # PI 2 base salary
+            "1.0",       # PI 2 months
+        ] + [""] * 14    # remaining prompts use defaults
+
+        result = subprocess.run(
+            [sys.executable, self.SCRIPT],
+            input="\n".join(stdin_lines) + "\n",
+            capture_output=True, text=True,
+            cwd=str(tmp_path), timeout=30,
+        )
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+
+        log_contents = (tmp_path / "budget.log").read_text()
+
+        # Both PIs should have their details logged
+        assert "PI 1:" in log_contents
+        assert "PI 2:" in log_contents
+        assert f"${d_base}" not in log_contents or "base 9-month salary" in log_contents
+        assert "$150,000.00" in log_contents
+        assert "summer months = 1.0" in log_contents
 
     def test_missing_par_file(self, tmp_path):
         """Script should exit with error if budget.par is missing."""
