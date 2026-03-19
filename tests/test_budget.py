@@ -117,13 +117,23 @@ class TestCalculateBudget:
         for y in range(3):
             assert r["yearly"][y] == pytest.approx(r["tdc"][y] + r["indirect"][y])
 
-    def test_mtdc_excludes_fees_and_insurance(self):
+    def test_mtdc_excludes_fees_but_not_insurance(self):
         r = calculate_budget(**self.BASE_INPUTS)
         for y in range(3):
-            # MTDC = TDC - grad_fees - grad_ins - subaward (all zero here)
+            # MTDC = TDC - grad_fees - subaward - equipment
+            # grad_ins is part of fringe and stays in MTDC
             expected_diff = r["tdc"][y] - r["mtdc"][y]
-            # grad_fees and grad_ins inflate each year
+            # Only grad_fees excluded (inflates each year)
             assert expected_diff > 0
+
+    def test_grad_insurance_included_in_mtdc(self):
+        """Health insurance is fringe and should NOT be excluded from MTDC."""
+        inputs_with_ins = {**self.BASE_INPUTS, "grad_ins": 5000.0}
+        inputs_no_ins = {**self.BASE_INPUTS, "grad_ins": 0.0}
+        r_ins = calculate_budget(**inputs_with_ins)
+        r_no = calculate_budget(**inputs_no_ins)
+        # MTDC should increase by the insurance amount (it's not excluded)
+        assert r_ins["mtdc"][0] == pytest.approx(r_no["mtdc"][0] + 5000.0)
 
     def test_no_subaward_no_subaward_indirect(self):
         r = calculate_budget(**self.BASE_INPUTS)

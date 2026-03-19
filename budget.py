@@ -69,7 +69,7 @@ def calculate_budget(number_years, faculty_salary, grad_salary, grad_fees, grad_
                      + postdoc_salary + undergrad_salary + travel + pub_costs
                      + fringe + postdoc_health + subaward[year] + equipment)
 
-        mtdc[year] = tdc[year] - grad_fees - grad_ins - subaward[year] - equipment
+        mtdc[year] = tdc[year] - grad_fees - subaward[year] - equipment
 
         indirect[year] = indirect_rate * mtdc[year]
 
