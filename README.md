@@ -39,7 +39,7 @@ Consult with your institutional office of research administration for current ra
 
 - **Faculty salary**: Computed from 9-month base salary and number of summer months requested. Supports multiple PIs.
 - **Fringe**: Payroll tax (`fringe_rate`) applies to faculty summer salary, graduate student summer stipend (25% of annual), and undergraduate salary. Postdocs use the full-time fringe rate.
-- **Graduate students**: Annual stipend + tuition/fees + health insurance. Tuition/fees and health insurance are excluded from MTDC.
+- **Graduate students**: Annual stipend + tuition/fees + health insurance. Tuition/fees are excluded from MTDC; health insurance is part of fringe and remains in the MTDC base.
 - **Equipment**: Fixed yearly cost, excluded from MTDC (no inflation).
 - **Subawards**: Per-year amounts, excluded from MTDC. Indirect is charged on the first $25,000 of each year's subaward per NSF policy.
 - **Inflation**: Applied at the end of each year to salaries, stipends, and fees for the following year.
@@ -92,11 +92,11 @@ Input Parameters
                Publication Costs       $1,000.00       $1,000.00       $1,000.00       $3,000.00
                         Subaward           $0.00           $0.00           $0.00           $0.00
 ------------------------------------------------------------------------------------------------
-     Modified Total Direct Costs     $160,109.01     $164,672.28     $169,372.45     $494,153.75
-                        Indirect      $94,464.32      $97,156.65      $99,929.75     $291,550.71
+     Modified Total Direct Costs     $161,504.01     $166,109.13     $170,852.41     $498,465.56
+                        Indirect      $95,287.37      $98,004.39     $100,802.92     $294,094.68
 ------------------------------------------------------------------------------------------------
                     Total Direct     $173,919.01     $178,896.58     $184,023.48     $536,839.08
-                    Total Budget     $268,383.33     $276,053.23     $283,953.23     $828,389.79
+                    Total Budget     $269,206.38     $276,900.97     $284,826.40     $830,933.76
 ```
 
 ## Logging
