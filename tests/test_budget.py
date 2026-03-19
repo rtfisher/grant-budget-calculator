@@ -135,6 +135,13 @@ class TestCalculateBudget:
         # MTDC should increase by the insurance amount (it's not excluded)
         assert r_ins["mtdc"][0] == pytest.approx(r_no["mtdc"][0] + 5000.0)
 
+    def test_grad_fringe_health_combines_fringe_and_insurance(self):
+        """grad_fringe_health should equal grad payroll-tax fringe + grad health insurance."""
+        r = calculate_budget(**self.BASE_INPUTS)
+        d = r["details"][0]
+        expected = GRAD_SUMMER_FRACTION * self.BASE_INPUTS["grad_salary"] * self.BASE_INPUTS["fringe_rate"] + self.BASE_INPUTS["grad_ins"]
+        assert d["grad_fringe_health"] == pytest.approx(expected)
+
     def test_no_subaward_no_subaward_indirect(self):
         r = calculate_budget(**self.BASE_INPUTS)
         # With zero subawards, indirect should just be indirect_rate * mtdc
