@@ -9,16 +9,16 @@ fulltime_fringe     = 0.3781
 inflation           = 0.03
 
 # Default salaries and fees (used if you just press Enter at the prompt)
-faculty_base_salary = 100000
-faculty_months      = 0.25
-grad_stipend        = 26000
-grad_fees           = 14500
-grad_insurance      = 1232
+faculty_base_salary = 0
+faculty_months      = 0
+grad_stipend        = 0
+grad_fees           = 0
+grad_insurance      = 0
 undergrad_salary    = 0
 postdoc_salary      = 0
 postdoc_health      = 0
 
 # Other defaults
 equipment           = 0
-travel              = 2500
+travel              = 0
 pub_costs           = 0

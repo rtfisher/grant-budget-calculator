@@ -2,35 +2,51 @@
 
 # Grant Budget Calculator
 
-A terminal-based Python script for calculating research grant budgets with year-by-year inflation, fringe benefits, indirect costs, and subaward handling.
+A Python tool for calculating research grant budgets with year-by-year inflation, fringe benefits, indirect costs, and subaward handling. Three interfaces: a basic CLI, an extended CLI with partial-year support, and a curses-based TUI.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `budget.py` | Main budget calculator script |
+| `budget_tui.py` | Curses-based TUI (recommended) -- menu-driven interface with live totals |
+| `budget_partial_years.py` | CLI with partial/fractional budget period support |
+| `budget.py` | Original CLI calculator (full calendar years only) |
 | `budget.par` | Editable parameter file with institutional rates and default values |
 | `budget.log` | Append-only log of all runs (auto-generated) |
 
 ## Quick Start
 
 ```bash
-python budget.py
+python budget_tui.py               # TUI (recommended)
+python budget_partial_years.py     # CLI with partial-year support
+python budget.py                   # original CLI
 ```
 
-The script reads default values from `budget.par` and prompts interactively for all inputs. Press Enter at any prompt to accept the default shown in brackets.
+The TUI reads default rates from `budget.par` and presents a menu where you navigate budget categories with arrow keys, edit values, and finalize the budget. The CLI scripts prompt interactively; press Enter to accept the default shown in brackets.
+
+## TUI Interface
+
+`budget_tui.py` provides a Pine/Alpine-style menu interface:
+
+- **Arrow keys** navigate budget categories (Project Dates, Senior Investigators, Graduate Students, Postdocs, etc.)
+- **Enter** opens a sub-screen to edit values for that category
+- **F** finalizes the budget and displays results in a scrollable view
+- **S** saves results to `budget.log` (on the results screen)
+- **Q** quits (with confirmation if unsaved)
+
+The TUI supports partial budget periods via the Project Dates menu item (Tab toggles between date mode and year mode).
 
 ## Parameter File (`budget.par`)
 
-Institutional rates and default salary values live in `budget.par`, a plain text file with `key = value` format. Lines starting with `#` are comments. Edit this file to update rates for a new fiscal year without modifying the script.
+Institutional rates live in `budget.par`, a plain text file with `key = value` format. Lines starting with `#` are comments. Edit this file to update rates for a new fiscal year without modifying the script.
 
 Key parameters:
 
 | Parameter | Description | Example |
 |-----------|-------------|---------|
 | `indirect_rate` | F&A (indirect) cost rate | `0.59` |
-| `fringe_rate` | Payroll tax rate (FICA) for part-time/summer wages | `0.0211` |
-| `fulltime_fringe` | Full-time employee fringe benefit rate | `0.4531` |
+| `fringe_rate` | Payroll tax rate (FICA) for part-time/summer wages | `0.0221` |
+| `fulltime_fringe` | Full-time employee fringe benefit rate | `0.3781` |
 | `inflation` | Annual salary/fee inflation rate | `0.03` |
 
 Consult with your institutional office of research administration for current rates.
@@ -45,60 +61,24 @@ Consult with your institutional office of research administration for current ra
 - **Inflation**: Applied at the end of each year to salaries, stipends, and fees for the following year.
 - **Indirect (F&A)**: Applied to MTDC plus the capped subaward amount.
 
+## Partial Budget Periods
+
+`budget_partial_years.py` and `budget_tui.py` support fractional budget periods for grants whose duration is not a whole number of years (e.g., a 33-month award).
+
+- Specify a **project start date** and **end date** (any dates -- no restriction to 1st of month).
+- Budget periods are split at anniversary boundaries of the start date. The last period may be shorter.
+- All annual costs are prorated by `days / 365.25` for each period. Equipment and subaward values are per-period and not scaled.
+- **Summer months** (June, July, August) for graduate FICA are computed from the actual calendar overlap of each period, rather than using a hardcoded 3/12 fraction.
+- Inflation compounds as `(1 + r) ^ frac` for fractional periods.
+- The subaward indirect cap ($25k) is prorated for fractional periods.
+- Skipping the date prompt (or using year mode in the TUI) gives full calendar years identical to `budget.py`.
+
 ## Output Formats
 
-The script produces two budget tables:
+The calculator produces two budget tables:
 
-1. **NSF-style detailed table** — Line-by-line breakdown of all salary, fringe, and cost components.
-2. **NASA R&R budget format** — Standard federal R&R categories (A–K): Senior/Key Person, Other Personnel, Equipment, Travel, Participant/Trainee Support, Other Direct Costs, Direct/Indirect totals, Fee, and Budget Total.
-
-## Sample Output
-
-```
-Input Parameters
----------------------------------
-  Number of years              = 3
-  Number of faculty            = 1
-    PI 1: base 9-month salary = $100,000.00, summer months = 0.25, contribution = $2,777.78
-  Faculty salary (year 1)      = $2,777.78
-  Graduate stipend             = $35,000.00
-  Graduate tuition + fees      = $12,415.00
-  Graduate health insurance    = $1,395.00
-  Undergraduate salary         = $5,000.00
-  Postdoc salary               = $75,000.00
-  Postdoc health               = $2,000.00
-  Travel                       = $5,000.00
-  Publication costs            = $1,000.00
-  Subawards                    = [0, 0, 0]
-  Indirect rate                = 0.59
-  Fringe (payroll tax) rate    = 0.0211
-  Full-time fringe rate        = 0.4531
-  Inflation rate               = 0.03
-
-
-                                          Year 1          Year 2          Year 3           Total
-------------------------------------------------------------------------------------------------
-                  Faculty Salary       $2,777.78       $2,861.11       $2,946.94       $8,585.83
-                  Faculty Fringe          $58.61          $60.37          $62.18         $181.16
-                 Graduate Salary      $35,000.00      $36,050.00      $37,131.50     $108,181.50
-        Grad Fringe + Health Ins       $1,579.62       $1,627.01       $1,675.82       $4,882.46
-                  Postdoc Salary      $75,000.00      $77,250.00      $79,567.50     $231,817.50
-                  Postdoc Fringe      $33,982.50      $35,001.97      $36,052.03     $105,036.51
-                   Total Postdoc     $110,982.50     $114,251.98     $117,619.53     $342,854.01
-            Undergraduate Salary       $5,000.00       $5,150.00       $5,304.50      $15,454.50
-            Undergraduate Fringe         $105.50         $108.67         $111.92         $326.09
-                    Total Fringe      $34,331.24      $35,361.17      $36,422.01     $106,114.42
-                Graduate Tuition      $12,415.00      $12,787.45      $13,171.07      $38,373.52
-                          Travel       $5,000.00       $5,000.00       $5,000.00      $15,000.00
-               Publication Costs       $1,000.00       $1,000.00       $1,000.00       $3,000.00
-                        Subaward           $0.00           $0.00           $0.00           $0.00
-------------------------------------------------------------------------------------------------
-     Modified Total Direct Costs     $161,504.01     $166,109.13     $170,852.41     $498,465.56
-                        Indirect      $95,287.37      $98,004.39     $100,802.92     $294,094.68
-------------------------------------------------------------------------------------------------
-                    Total Direct     $173,919.01     $178,896.58     $184,023.48     $536,839.08
-                    Total Budget     $269,206.38     $276,900.97     $284,826.40     $830,933.76
-```
+1. **NSF-style detailed table** -- Line-by-line breakdown of all salary, fringe, and cost components.
+2. **NASA R&R budget format** -- Standard federal R&R categories (A-K): Senior/Key Person, Other Personnel, Equipment, Travel, Participant/Trainee Support, Other Direct Costs, Direct/Indirect totals, Fee, and Budget Total.
 
 ## Logging
 
@@ -111,18 +91,24 @@ Each run appends a timestamped record to `budget.log` containing:
 ## Requirements
 
 - Python 3.6+
-- No third-party dependencies
+- No third-party dependencies (`curses` is in the Python standard library)
+- Windows users need `pip install windows-curses` for the TUI
 
 ## Running Tests
 
 ```bash
 pip install pytest
-pytest
+pytest                                    # run all tests (139)
+pytest tests/test_budget.py               # original calculator tests
+pytest tests/test_budget_partial_years.py  # partial-year tests
+pytest tests/test_budget_tui.py            # TUI tests
 ```
+
+CI runs on Python 3.9 and 3.12 via GitHub Actions on every push and PR to main.
 
 ## Acknowledgments
 
-Claude (Anthropic) collaborated with rtfisher on refactoring and CI/CD integration.
+Robert Fisher + Claude Opus (Anthropic).
 
 ## License
 

@@ -5,10 +5,11 @@
 #           removed numpy dependency, added currency formatting,
 #           fixed Python 2 print remnants, extracted testable functions.
 # 2/16/26 : Restructured output to tabular format.
+# 4/26    : Extended to support partial/fractional budget periods.
 
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, date
 
 PAR_FILE = "budget.par"
 LOG_FILE = "budget.log"
@@ -41,60 +42,149 @@ GRAD_SUMMER_FRACTION = 0.25
 # NSF caps indirect on subawards at $25k per year
 SUBAWARD_INDIRECT_CAP = 25000
 
+# Summer months for graduate FICA computation
+SUMMER_MONTHS = {6, 7, 8}  # June, July, August
+
+
+def summer_months_in_period(start_date, end_date):
+    """Count how many of {June, July, August} are fully within [start_date, end_date).
+
+    A month is fully contained if the 1st of that month >= start_date AND
+    the 1st of the following month <= end_date.
+    """
+    count = 0
+    for year in range(start_date.year, end_date.year + 1):
+        for month in SUMMER_MONTHS:
+            first_of_month = date(year, month, 1)
+            first_of_next = date(year, month + 1, 1)  # month is 6,7,8 so +1 is safe
+            if first_of_month >= start_date and first_of_next <= end_date:
+                count += 1
+    return count
+
+
+def _anniversary(d):
+    """Return the same month/day one year later. Feb 29 -> Feb 28 in non-leap years."""
+    try:
+        return date(d.year + 1, d.month, d.day)
+    except ValueError:
+        return date(d.year + 1, d.month, 28)
+
+
+def compute_period_fractions(start_date, end_date):
+    """Split a project date range into anniversary-aligned budget periods.
+
+    Accepts any valid dates.  Returns a list of period dicts with keys:
+    start, end, duration_days, frac, summer_months.
+    """
+    if end_date <= start_date:
+        raise ValueError("end_date must be after start_date")
+
+    periods = []
+    period_start = start_date
+    while period_start < end_date:
+        anniversary = _anniversary(period_start)
+        period_end = min(anniversary, end_date)
+        days = (period_end - period_start).days
+        frac = days / 365.25
+        summer = summer_months_in_period(period_start, period_end)
+        periods.append({
+            "start": period_start,
+            "end": period_end,
+            "duration_days": days,
+            "frac": frac,
+            "summer_months": summer,
+        })
+        period_start = period_end
+
+    return periods
+
 
 def calculate_budget(number_years, faculty_salary, grad_salary, grad_fees, grad_ins,
                      undergrad_salary, postdoc_salary, postdoc_health, travel, pub_costs,
                      subaward, indirect_rate, fringe_rate, fulltime_fringe, inflation,
-                     equipment=0):
+                     equipment=0, period_fractions=None):
     """Calculate the year-by-year budget and return results as a dict.
 
-    All salary/fee arguments are year-1 values; inflation is applied for
-    subsequent years inside this function.  The subaward argument is a list
+    All salary/fee arguments are year-1 *annual* values; inflation is applied
+    for subsequent years inside this function.  The subaward argument is a list
     of length number_years.  Equipment is a fixed yearly cost (no inflation).
+
+    When period_fractions is None, all periods are treated as full 12-month
+    years (backward-compatible with budget.py).  When provided, it must be a
+    list of dicts (length == number_years) each containing 'duration_days', 'frac',
+    and 'summer_months'.
 
     Returns a dict with keys:
         tdc, mtdc, indirect, yearly  — lists of length number_years
         details — list of per-year detail dicts (for display / logging)
     """
+    if period_fractions is not None:
+        assert len(period_fractions) == number_years, (
+            f"period_fractions length ({len(period_fractions)}) != number_years ({number_years})")
+
     tdc = [0.0] * number_years
     mtdc = [0.0] * number_years
     indirect = [0.0] * number_years
     details = []
 
     for year in range(number_years):
-        fringe = ((GRAD_SUMMER_FRACTION * grad_salary + undergrad_salary + faculty_salary) * fringe_rate
-                  + fulltime_fringe * postdoc_salary)
+        # Determine period scaling factors
+        if period_fractions is not None:
+            pf = period_fractions[year]
+            frac = pf["frac"]
+            summer_frac = pf["summer_months"] / 12.0
+            cap = SUBAWARD_INDIRECT_CAP * frac
+        else:
+            frac = 1.0
+            summer_frac = GRAD_SUMMER_FRACTION
+            cap = SUBAWARD_INDIRECT_CAP
 
-        tdc[year] = (faculty_salary + grad_salary + grad_fees + grad_ins
-                     + postdoc_salary + undergrad_salary + travel + pub_costs
-                     + fringe + postdoc_health + subaward[year] + equipment)
+        # Scale annual costs by period fraction
+        faculty_salary_period = faculty_salary * frac
+        grad_salary_period = grad_salary * frac
+        grad_fees_period = grad_fees * frac
+        grad_ins_period = grad_ins * frac
+        undergrad_salary_period = undergrad_salary * frac
+        postdoc_salary_period = postdoc_salary * frac
+        postdoc_health_period = postdoc_health * frac
+        travel_period = travel * frac
+        pub_costs_period = pub_costs * frac
 
-        mtdc[year] = tdc[year] - grad_fees - subaward[year] - equipment
+        fringe = ((summer_frac * grad_salary + undergrad_salary_period + faculty_salary_period) * fringe_rate
+                  + fulltime_fringe * postdoc_salary_period)
+
+        tdc[year] = (faculty_salary_period + grad_salary_period + grad_fees_period + grad_ins_period
+                     + postdoc_salary_period + undergrad_salary_period + travel_period + pub_costs_period
+                     + fringe + postdoc_health_period + subaward[year] + equipment)
+
+        mtdc[year] = tdc[year] - grad_fees_period - subaward[year] - equipment
 
         indirect[year] = indirect_rate * mtdc[year]
 
-        # NSF: indirect on subawards applies to the first $25k of each year's subaward
-        subaward_mtdc = min(subaward[year], SUBAWARD_INDIRECT_CAP)
+        # NSF: indirect on subawards applies to the first $25k (prorated) of each year's subaward
+        subaward_mtdc = min(subaward[year], cap)
         indirect[year] += indirect_rate * subaward_mtdc
 
         details.append({
             "year": year + 1,
-            "faculty_salary": faculty_salary,
-            "faculty_fringe": faculty_salary * fringe_rate,
-            "grad_salary": grad_salary,
-            "grad_fringe": GRAD_SUMMER_FRACTION * grad_salary * fringe_rate,
-            "grad_fringe_health": GRAD_SUMMER_FRACTION * grad_salary * fringe_rate + grad_ins,
-            "postdoc_salary": postdoc_salary,
-            "postdoc_fringe": postdoc_salary * fulltime_fringe,
-            "total_postdoc": (1 + fulltime_fringe) * postdoc_salary + postdoc_health,
-            "undergrad_salary": undergrad_salary,
-            "undergrad_fringe": undergrad_salary * fringe_rate,
+            "frac": frac,
+            "summer_months": pf["summer_months"] if period_fractions is not None else 3,
+            "faculty_salary": faculty_salary_period,
+            "faculty_fringe": faculty_salary_period * fringe_rate,
+            "grad_salary": grad_salary_period,
+            "grad_fringe": summer_frac * grad_salary * fringe_rate,
+            "grad_fringe_health": summer_frac * grad_salary * fringe_rate + grad_ins_period,
+            "postdoc_salary": postdoc_salary_period,
+            "postdoc_fringe": postdoc_salary_period * fulltime_fringe,
+            "total_postdoc": (1 + fulltime_fringe) * postdoc_salary_period + postdoc_health_period,
+            "undergrad_salary": undergrad_salary_period,
+            "undergrad_fringe": undergrad_salary_period * fringe_rate,
             "total_fringe": fringe,
-            "grad_fees": grad_fees,
-            "grad_ins": grad_ins,
-            "postdoc_health": postdoc_health,
-            "travel": travel,
-            "pub_costs": pub_costs,
+            "grad_fees": grad_fees_period,
+            "grad_ins": grad_ins_period,
+            "postdoc_health": postdoc_health_period,
+            "travel": travel_period,
+            "pub_costs": pub_costs_period,
             "equipment": equipment,
             "subaward": subaward[year],
             "subaward_mtdc": subaward_mtdc,
@@ -102,13 +192,19 @@ def calculate_budget(number_years, faculty_salary, grad_salary, grad_fees, grad_
             "indirect": indirect[year],
         })
 
-        # Inflate for next year
-        faculty_salary *= (1.0 + inflation)
-        grad_salary *= (1.0 + inflation)
-        postdoc_salary *= (1.0 + inflation)
-        grad_fees *= (1.0 + inflation)
-        grad_ins *= (1.0 + inflation)
-        undergrad_salary *= (1.0 + inflation)
+        # Inflate for next period — use exact (1+r) for full years to avoid
+        # floating-point divergence from the original budget.py code path.
+        if frac == 1.0:
+            inflation_factor = 1.0 + inflation
+        else:
+            inflation_factor = (1.0 + inflation) ** frac
+
+        faculty_salary *= inflation_factor
+        grad_salary *= inflation_factor
+        postdoc_salary *= inflation_factor
+        grad_fees *= inflation_factor
+        grad_ins *= inflation_factor
+        undergrad_salary *= inflation_factor
 
     yearly = [tdc[y] + indirect[y] for y in range(number_years)]
 
@@ -133,9 +229,10 @@ def main():
         print(msg)
         logfile.write(msg + "\n")
 
-    log("Basic Grant Budget Calculator")
+    log("Basic Grant Budget Calculator (partial-year support)")
     log("Robert Fisher, 11/2/2016")
     log("Refactored 2/16/2026 — defaults read from budget.par")
+    log("Extended 4/2026 — partial budget period support")
     log(f"Run: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     log()
 
@@ -143,12 +240,42 @@ def main():
     def default(key):
         return params.get(key, "0")
 
-    # ── Number of years and PIs ──────────────────────────────────────
+    # ── Project dates (optional) ────────────────────────────────────
 
-    number_years = int(input("Enter number of years [3]: ") or "3")
-    if number_years < 1:
-        print("Error: number of years must be at least 1.")
-        sys.exit(1)
+    print("Enter project start date (YYYY-MM-DD) or press Enter for full calendar years:")
+    start_input = input().strip()
+
+    period_fractions = None
+    has_fractional = False
+
+    if start_input:
+        start_date = datetime.strptime(start_input, "%Y-%m-%d").date()
+
+        end_input = input("Enter project end date (YYYY-MM-DD): ").strip()
+        if not end_input:
+            print("Error: end date is required when start date is given.")
+            sys.exit(1)
+        end_date = datetime.strptime(end_input, "%Y-%m-%d").date()
+
+        if end_date <= start_date:
+            print("Error: end date must be after start date.")
+            sys.exit(1)
+
+        period_fractions = compute_period_fractions(start_date, end_date)
+        number_years = len(period_fractions)
+        has_fractional = any(abs(pf["frac"] - 1.0) > 0.01 for pf in period_fractions)
+
+        print(f"Project: {start_date} to {end_date} ({number_years} budget period(s))")
+        for i, pf in enumerate(period_fractions):
+            print(f"  Period {i+1}: {pf['start']} to {pf['end']} "
+                  f"({pf['duration_days']} days, {pf['summer_months']} summer)")
+    else:
+        number_years = int(input("Enter number of years [3]: ") or "3")
+        if number_years < 1:
+            print("Error: number of years must be at least 1.")
+            sys.exit(1)
+
+    # ── Number of PIs ───────────────────────────────────────────────
 
     number_pis = int(input("Enter number of supported faculty [1]: ") or "1")
     if number_pis < 0:
@@ -217,7 +344,11 @@ def main():
 
     while True:
         try:
-            print(f"Enter subaward as {number_years} integers, e.g., 1000 2000 ..., or press Enter for all zero:")
+            if has_fractional:
+                durations = ", ".join(f"{round(pf['frac'] * 12, 1)}mo" for pf in period_fractions)
+                print(f"Enter subaward as {number_years} integers ({durations}), or press Enter for all zero:")
+            else:
+                print(f"Enter subaward as {number_years} integers, e.g., 1000 2000 ..., or press Enter for all zero:")
             user_input = input().strip()
 
             if not user_input:
@@ -257,6 +388,12 @@ def main():
     logfile.write("=" * 60 + "\n")
     log("Input Parameters")
     log("---------------------------------")
+    if period_fractions:
+        log(f"  Project start              = {start_date}")
+        log(f"  Project end                = {end_date}")
+        for i, pf in enumerate(period_fractions):
+            log(f"  Period {i+1}                   = {pf['start']} to {pf['end']} "
+                f"({pf['duration_days']} days, {pf['summer_months']} summer)")
     log(f"  Number of years              = {number_years}")
     log(f"  Number of faculty            = {number_pis}")
     for i, pid in enumerate(pi_details):
@@ -285,7 +422,7 @@ def main():
         number_years, faculty_salary, grad_salary, grad_fees, grad_ins,
         undergrad_salary, postdoc_salary, postdoc_health, travel, pub_costs,
         subaward, indirect_rate, fringe_rate, fulltime_fringe, inflation,
-        equipment)
+        equipment, period_fractions=period_fractions)
 
     tdc = results["tdc"]
     indirect = results["indirect"]
@@ -320,8 +457,15 @@ def main():
         cols = "".join(f"{dollar(v):>{col_w}}" for v in values)
         return f"{label:>{label_w}}{cols}{dollar(total):>{col_w}}"
 
+    # Column headers — annotate with duration when fractional periods exist
+    if has_fractional:
+        col_headers = [f"Yr {y+1} ({round(period_fractions[y]['frac'] * 12, 1)}mo)"
+                       for y in range(number_years)]
+    else:
+        col_headers = [f"Year {y+1}" for y in range(number_years)]
+
     header = (f"{'':>{label_w}}"
-              + "".join(f"{'Year ' + str(y+1):>{col_w}}" for y in range(number_years))
+              + "".join(f"{h:>{col_w}}" for h in col_headers)
               + f"{'Total':>{col_w}}")
     sep = "-" * len(header)
 
@@ -351,7 +495,9 @@ def main():
         log()
         for d in details:
             if d["subaward_mtdc"] > 0:
-                log(f"  Note: Year {d['year']} subaward indirect (on first $25k) = {dollar(indirect_rate * d['subaward_mtdc'])}")
+                cap_display = dollar(d["subaward_mtdc"])
+                log(f"  Note: Year {d['year']} subaward indirect (on first {cap_display}) = "
+                    f"{dollar(indirect_rate * d['subaward_mtdc'])}")
 
     # ── NASA R&R Budget Format ─────────────────────────────────────
 
@@ -409,8 +555,10 @@ def main():
     ]
 
     nasa_label_w = 40
+
+    # Reuse the same column headers for NASA table
     nasa_header = (f"{'':>{nasa_label_w}}"
-                   + "".join(f"{'Year ' + str(y+1):>{col_w}}" for y in range(number_years))
+                   + "".join(f"{h:>{col_w}}" for h in col_headers)
                    + f"{'Total':>{col_w}}")
     nasa_sep = "-" * len(nasa_header)
 
