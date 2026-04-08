@@ -2,27 +2,25 @@
 
 # Grant Budget Calculator
 
-A Python tool for calculating research grant budgets with year-by-year inflation, fringe benefits, indirect costs, and subaward handling. Three interfaces: a basic CLI, an extended CLI with partial-year support, and a curses-based TUI.
+A Python tool for calculating research grant budgets with year-by-year inflation, fringe benefits, indirect costs, and subaward handling. Features a curses-based TUI with partial budget period support.
 
 ## Files
 
 | File | Purpose |
 |------|---------|
-| `budget_tui.py` | Curses-based TUI (recommended) -- menu-driven interface with live totals |
-| `budget_partial_years.py` | CLI with partial/fractional budget period support |
-| `budget.py` | Original CLI calculator (full calendar years only) |
+| `budget_tui.py` | Curses-based TUI -- menu-driven interface with live totals |
+| `budget_partial_years.py` | Calculation engine and CLI alternative |
 | `budget.par` | Editable parameter file with institutional rates and default values |
 | `budget.log` | Append-only log of all runs (auto-generated) |
 
 ## Quick Start
 
 ```bash
-python budget_tui.py               # TUI (recommended)
-python budget_partial_years.py     # CLI with partial-year support
-python budget.py                   # original CLI
+python budget_tui.py               # TUI (primary interface)
+python budget_partial_years.py     # CLI alternative
 ```
 
-The TUI reads default rates from `budget.par` and presents a menu where you navigate budget categories with arrow keys, edit values, and finalize the budget. The CLI scripts prompt interactively; press Enter to accept the default shown in brackets.
+The TUI reads default rates from `budget.par` and presents a menu where you navigate budget categories with arrow keys, edit values, and finalize the budget. The CLI prompts interactively; press Enter to accept the default shown in brackets.
 
 ## TUI Interface
 
@@ -71,7 +69,7 @@ Consult with your institutional office of research administration for current ra
 - **Summer months** (June, July, August) for graduate FICA are computed from the actual calendar overlap of each period, rather than using a hardcoded 3/12 fraction.
 - Inflation compounds as `(1 + r) ^ frac` for fractional periods.
 - The subaward indirect cap ($25k) is prorated for fractional periods.
-- Skipping the date prompt (or using year mode in the TUI) gives full calendar years identical to `budget.py`.
+- Skipping the date prompt (or using year mode in the TUI) gives full calendar years.
 
 ## Output Formats
 
@@ -98,9 +96,8 @@ Each run appends a timestamped record to `budget.log` containing:
 
 ```bash
 pip install pytest
-pytest                                    # run all tests (139)
-pytest tests/test_budget.py               # original calculator tests
-pytest tests/test_budget_partial_years.py  # partial-year tests
+pytest                                    # run all tests
+pytest tests/test_budget_partial_years.py  # calculation engine tests
 pytest tests/test_budget_tui.py            # TUI tests
 ```
 

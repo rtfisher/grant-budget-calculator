@@ -14,7 +14,6 @@ from budget_partial_years import (
     summer_months_in_period, compute_period_fractions,
     GRAD_SUMMER_FRACTION, SUBAWARD_INDIRECT_CAP, SUMMER_MONTHS,
 )
-from budget import calculate_budget as calc_original
 
 
 # ── Unit tests for summer_months_in_period ──────────────────────────
@@ -175,62 +174,6 @@ class TestComputePeriodFractions:
         assert periods[1]["end"] == date(2028, 6, 15)
         # Verify continuity
         assert periods[0]["end"] == periods[1]["start"]
-
-
-# ── Backward compatibility tests ────────────────────────────────────
-
-
-class TestCalculateBudgetBackwardCompat:
-    """Verify that calling calculate_budget without period_fractions
-    produces identical results to the original budget.py."""
-
-    BASE_INPUTS = dict(
-        number_years=3,
-        faculty_salary=120000 / 9.0 * 0.25,
-        grad_salary=26000,
-        grad_fees=14500.0,
-        grad_ins=1232.0,
-        undergrad_salary=0,
-        postdoc_salary=0,
-        postdoc_health=0,
-        travel=2500,
-        pub_costs=0,
-        subaward=[0, 0, 0],
-        indirect_rate=0.59,
-        fringe_rate=0.0221,
-        fulltime_fringe=0.3781,
-        inflation=0.03,
-    )
-
-    def test_no_period_fractions_matches_original(self):
-        r_new = calculate_budget(**self.BASE_INPUTS)
-        r_orig = calc_original(**self.BASE_INPUTS)
-        for key in ["tdc", "mtdc", "indirect", "yearly"]:
-            for i in range(3):
-                assert r_new[key][i] == pytest.approx(r_orig[key][i])
-
-    def test_with_all_options_matches_original(self):
-        """Test with postdoc, undergrad, subaward, equipment."""
-        inputs = {**self.BASE_INPUTS,
-                  "postdoc_salary": 60000, "postdoc_health": 3000,
-                  "undergrad_salary": 5000, "pub_costs": 1000,
-                  "equipment": 8000, "subaward": [30000, 20000, 10000]}
-        r_new = calculate_budget(**inputs)
-        r_orig = calc_original(**inputs)
-        for key in ["tdc", "mtdc", "indirect", "yearly"]:
-            for i in range(3):
-                assert r_new[key][i] == pytest.approx(r_orig[key][i])
-
-    def test_details_match_original(self):
-        """Verify detail dict values match for all shared keys."""
-        r_new = calculate_budget(**self.BASE_INPUTS)
-        r_orig = calc_original(**self.BASE_INPUTS)
-        # The original doesn't have 'frac' or 'summer_months' keys
-        shared_keys = set(r_orig["details"][0].keys())
-        for i in range(3):
-            for key in shared_keys:
-                assert r_new["details"][i][key] == pytest.approx(r_orig["details"][i][key]), \
-                    f"details[{i}][{key}]: {r_new['details'][i][key]} != {r_orig['details'][i][key]}"
 
 
 # ── Tests for calculate_budget with partial periods ─────────────────

@@ -2,28 +2,25 @@
 
 ## Project overview
 
-NSF-style grant budget calculator. Three interfaces share a common calculation engine: a basic CLI (`budget.py`), an extended CLI with partial-year support (`budget_partial_years.py`), and a curses-based TUI (`budget_tui.py`).
+NSF-style grant budget calculator. The curses-based TUI (`budget_tui.py`) is the primary interface. A CLI (`budget_partial_years.py`) is also available. Both share a common calculation engine with partial-year support. Previous versions are preserved in git history.
 
 ## Key files
 
-- `budget.py` — Original CLI script. Contains importable functions (`load_parameters`, `dollar`, `calculate_budget`) and an interactive `main()` entry point.
-- `budget_partial_years.py` — Extended CLI with partial/fractional budget period support. Adds `summer_months_in_period`, `compute_period_fractions`, `_anniversary`, and an optional `period_fractions` parameter to `calculate_budget`. Accepts arbitrary dates (not just 1st of month) and uses exact day counts (`days / 365.25`).
-- `budget_tui.py` — Curses-based TUI (Pine/Alpine style). Imports the calculation engine from `budget_partial_years.py`. Menu-driven interface with arrow-key navigation, field editing, live total estimate, and scrollable results.
+- `budget_tui.py` — Curses-based TUI (Pine/Alpine style). Primary interface. Imports the calculation engine from `budget_partial_years.py`. Menu-driven interface with arrow-key navigation, field editing, live total estimate, and scrollable results.
+- `budget_partial_years.py` — Calculation engine and CLI. Contains `calculate_budget`, `compute_period_fractions`, `summer_months_in_period`, `load_parameters`, `dollar`. Supports partial/fractional budget periods with exact day counts (`days / 365.25`).
 - `budget.par` — Parameter file with institutional rates and zeroed default values. Parsed as `key = value` with `#` comments.
 - `budget.log` — Append-only run log (auto-generated, do not commit).
-- `budget_110724.py` — Legacy version kept for reference. Do not modify.
-- `tests/test_budget.py` — Test suite for `budget.py`.
 - `tests/test_budget_partial_years.py` — Test suite for `budget_partial_years.py`.
 - `tests/test_budget_tui.py` — Test suite for `budget_tui.py` (state, validation, summaries).
 
 ## Architecture
 
-### Core calculation (budget.py, budget_partial_years.py)
+### Core calculation (budget_partial_years.py)
 
 - `load_parameters(path)` — Reads `budget.par` into a dict.
 - `dollar(amount)` — Formats floats as `$1,234.56`.
 - `calculate_budget(...)` — Pure function: takes all inputs, returns `{tdc, mtdc, indirect, yearly, details}` dict. No I/O. This is the testable core.
-- `main()` — Interactive CLI wrapper: reads params, prompts user, calls `calculate_budget`, logs output.
+- `main()` — CLI wrapper: reads params, prompts user, calls `calculate_budget`, logs output.
 
 ### Partial-year functions (budget_partial_years.py)
 
@@ -62,16 +59,15 @@ When `period_fractions` is provided to `calculate_budget`:
 - Grad summer fraction = `summer_months / 12.0` per period (replaces hardcoded 0.25).
 - Inflation compounds as `(1 + r) ^ frac` for fractional periods; uses exact `(1 + r)` for full years to avoid float divergence.
 - Subaward indirect cap prorated to `$25k x frac`.
-- When no dates are provided, all periods default to full years (identical to `budget.py`).
+- When no dates are provided, all periods default to full 12-month years.
 
 ## Testing
 
 ```bash
 pytest                   # run all tests (139 total)
 pytest -v                # verbose
-pytest tests/test_budget.py                # original calculator (44 tests)
-pytest tests/test_budget_partial_years.py  # partial-year features (46 tests)
-pytest tests/test_budget_tui.py            # TUI state & validation (49 tests)
+pytest tests/test_budget_partial_years.py  # calculation engine (43 tests)
+pytest tests/test_budget_tui.py            # TUI state & validation (50 tests)
 ```
 
 CI runs `pytest tests/ -v` on Python 3.9 and 3.12 via GitHub Actions.
