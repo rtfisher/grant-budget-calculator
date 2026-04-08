@@ -24,6 +24,8 @@ The TUI reads default rates from `budget.par` and presents a menu where you navi
 
 ## TUI Interface
 
+![TUI Screenshot](budget_tui_screenshot.png)
+
 `budget_tui.py` provides a Pine/Alpine-style menu interface:
 
 - **Arrow keys** navigate budget categories (Project Dates, Senior Investigators, Graduate Students, Postdocs, etc.)

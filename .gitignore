@@ -5,3 +5,4 @@ budget.log
 rates_notes.md
 .DS_Store
 *.txt
+!*.png
