@@ -4,3 +4,4 @@ __pycache__/
 budget.log
 rates_notes.md
 .DS_Store
+*.txt
