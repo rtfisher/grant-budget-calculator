@@ -239,8 +239,17 @@ def main():
     log()
 
     # Convenience: look up a default from the parameter file
+    _defaults = {
+        "faculty_base_salary": "100000",
+        "faculty_months": "0.25",
+        "grad_stipend": "26000",
+        "grad_fees": "14500",
+        "grad_insurance": "1232",
+        "travel": "2500",
+    }
+
     def default(key):
-        return params.get(key, "0")
+        return params.get(key, _defaults.get(key, "0"))
 
     # ── Project dates (optional) ────────────────────────────────────
 
@@ -501,11 +510,12 @@ def main():
                 log(f"  Note: Year {d['year']} subaward indirect (on first {cap_display}) = "
                     f"{dollar(indirect_rate * d['subaward_mtdc'])}")
 
-    # ── NASA R&R Budget Format ─────────────────────────────────────
+    # ── Federal Research & Related (R&R) Budget Format ──────────────
 
     log()
     log("=" * len(header))
-    log("NASA R&R Budget Format")
+    log("Federal Research & Related (R&R) Budget Format")
+    log("(NASA, DOE, NIH, and other Grants.gov agencies)")
     log("=" * len(header))
 
     nasa_items = []

@@ -10,8 +10,9 @@ NSF-style grant budget calculator. The curses-based TUI (`budget_tui.py`) is the
 - `budget_partial_years.py` — Calculation engine and CLI. Contains `calculate_budget`, `compute_period_fractions`, `summer_months_in_period`, `load_parameters`, `dollar`. Supports partial/fractional budget periods with exact day counts (`days / 365.25`).
 - `budget.par` — Parameter file with institutional rates and default values (UMassD). Parsed as `key = value` with `#` comments.
 - `*.log` — Budget log files (auto-generated, do not commit). Named `{agency}_{call}_{MMDDYY}.log` with auto-versioning.
-- `tests/test_budget_partial_years.py` — Test suite for `budget_partial_years.py`.
-- `tests/test_budget_tui.py` — Test suite for `budget_tui.py` (state, validation, summaries).
+- `tests/test_budget_partial_years.py` — Test suite for `budget_partial_years.py` (known-answer, MTDC/indirect, inflation, anniversary, load_parameters).
+- `tests/test_budget_tui.py` — Test suite for `budget_tui.py` (state, validation, summaries, log parsing, snapshot, write_log).
+- `tests/test_additional_coverage.py` — Additional coverage tests (dollar formatting, equipment MTDC exclusion, postdoc health, summer months, subaward cap, fixed per-period costs, long projects).
 
 ## Architecture
 
@@ -30,17 +31,18 @@ NSF-style grant budget calculator. The curses-based TUI (`budget_tui.py`) is the
 
 ### TUI (budget_tui.py)
 
-- `BudgetState` — Central state class holding all budget inputs (including `agency` and `program_call`). Initialized from `budget.par`. Methods: `from_par_file()`, `to_calc_args()`, `recompute_estimate()`, `finalize()`, `resize_subaward()`, `validate_field()`.
+- `BudgetState` — Central state class holding all budget inputs (including `agency` and `program_call`). Initialized from `budget.par`. Methods: `from_par_file()`, `to_calc_args()`, `recompute_estimate()`, `finalize()`, `resize_subaward()`, `validate_field()`, `_snapshot()`.
 - `PIInfo` — Holds per-PI base salary and summer months.
 - `MENU_ITEMS` — List of (label, summary_fn) tuples defining the main menu (10 items: Agency & Program, Project Dates, then budget categories).
 - Summary functions — `summary_agency()`, `summary_dates()`, `summary_pis()`, `summary_grads()`, etc.
 - `FieldEditor` — Character-by-character text field editing within curses.
-- `format_results()` — Formats full budget results (header + input params + NSF + NASA tables).
+- `format_results()` — Formats full budget results (header + input params + NSF + Federal R&R tables).
 - `format_nsf_table()` — Formats just the NSF-style detailed budget table.
-- `format_nasa_table()` — Formats just the NASA R&R budget table.
+- `format_nasa_table()` — Formats the Federal Research & Related (R&R) budget table (NASA, DOE, NIH, and other Grants.gov agencies).
 - `generate_log_filename(agency, program_call)` — Creates unique `{agency}_{call}_{MMDDYY}[_vN].log` filenames.
 - `parse_log_file(path)` — Parses a budget log file back into a `BudgetState` for loading.
-- `show_summary()` — Read-only viewer toggling between NSF and NASA tables (V key).
+- `show_summary()` — Read-only viewer toggling between NSF and Federal R&R tables (V key).
+- `_budget_col_headers(state)` — Generates column headers; annotates with fractional-period durations (e.g., "Yr 1 (8.2mo)") when dates produce partial periods.
 - `load_budget_screen()` — File picker for loading a previously saved budget (L key).
 - `write_log()` — Appends formatted results to the generated log file.
 
@@ -55,7 +57,7 @@ NSF-style grant budget calculator. The curses-based TUI (`budget_tui.py`) is the
 - "Grad Fringe + Health Ins" combines graduate payroll-tax fringe with graduate health insurance into a single display line. Health insurance is included in the MTDC base (not excluded like tuition).
 - Equipment is a fixed yearly cost excluded from MTDC (no inflation applied).
 - Inflation is applied at the end of each year to salaries, stipends, and fees.
-- Output includes both an NSF-style detailed table and a NASA R&R budget format summary.
+- Output includes both an NSF-style detailed table and a Federal Research & Related (R&R) budget format summary (used by NASA, DOE, NIH, and other Grants.gov agencies).
 
 ### Partial-period scaling (budget_partial_years.py)
 
@@ -70,10 +72,11 @@ When `period_fractions` is provided to `calculate_budget`:
 ## Testing
 
 ```bash
-pytest                   # run all tests (130 total)
+pytest                   # run all tests (203 total)
 pytest -v                # verbose
-pytest tests/test_budget_partial_years.py  # calculation engine (44 tests)
-pytest tests/test_budget_tui.py            # TUI state, validation, log parsing, summaries (86 tests)
+pytest tests/test_budget_partial_years.py  # calculation engine (75 tests)
+pytest tests/test_budget_tui.py            # TUI state, validation, log parsing, summaries (109 tests)
+pytest tests/test_additional_coverage.py   # additional coverage (19 tests)
 ```
 
 CI runs `pytest tests/ -v` on Python 3.9 and 3.12 via GitHub Actions.

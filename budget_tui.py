@@ -93,6 +93,20 @@ class BudgetState:
         self._estimated_total = None
         self._dirty = False
 
+    def _snapshot(self):
+        """Return a hashable snapshot of all public fields for change detection."""
+        pi_data = tuple((p.base_salary, p.summer_months) for p in self.pis)
+        return (
+            self.agency, self.program_call, self.use_dates,
+            self.start_date, self.end_date, self.number_years,
+            pi_data, self.number_grads,
+            self.grad_stipend_per, self.grad_fees_per, self.grad_ins_per,
+            self.undergrad_salary, self.postdoc_salary, self.postdoc_health,
+            self.travel, self.pub_costs, self.equipment, tuple(self.subaward),
+            self.indirect_rate, self.fringe_rate, self.fulltime_fringe,
+            self.inflation,
+        )
+
     @classmethod
     def from_par_file(cls, path):
         params = load_parameters(path)
@@ -391,6 +405,12 @@ def format_results(results, state):
 
 def _budget_col_headers(state):
     """Return column header strings for budget tables."""
+    if state.use_dates and state.start_date and state.end_date:
+        period_fractions = compute_period_fractions(state.start_date, state.end_date)
+        has_fractional = any(abs(pf["frac"] - 1.0) > 0.01 for pf in period_fractions)
+        if has_fractional:
+            return [f"Yr {y+1} ({round(period_fractions[y]['frac'] * 12, 1)}mo)"
+                    for y in range(state.number_years)]
     return [f"Year {y+1}" for y in range(state.number_years)]
 
 
@@ -454,7 +474,7 @@ def format_nsf_table(results, state):
 
 
 def format_nasa_table(results, state):
-    """Format the NASA R&R budget table as a list of strings."""
+    """Format the Federal R&R budget table as a list of strings."""
     lines = []
     details = results["details"]
     number_years = state.number_years
@@ -469,7 +489,8 @@ def format_nasa_table(results, state):
 
     lines.append("")
     lines.append("=" * len(header))
-    lines.append("NASA R&R Budget Format")
+    lines.append("Federal Research & Related (R&R) Budget Format")
+    lines.append("(NASA, DOE, NIH, and other Grants.gov agencies)")
     lines.append("=" * len(header))
 
     nasa_items = []
@@ -1045,7 +1066,7 @@ def show_summary(stdscr, state):
 
     nsf_lines = format_nsf_table(results, state)
     nasa_lines = format_nasa_table(results, state)
-    views = [("NSF Budget Summary", nsf_lines), ("NASA R&R Budget Summary", nasa_lines)]
+    views = [("NSF Budget Summary", nsf_lines), ("Federal R&R Budget Summary", nasa_lines)]
     view_idx = 0
 
     height, width = stdscr.getmaxyx()
@@ -1391,9 +1412,11 @@ def main(stdscr):
             selected = (selected + 1) % total_items
         elif key in (curses.KEY_ENTER, 10, 13):
             if selected < len(MENU_ITEMS):
+                before = state._snapshot()
                 dispatch_edit(stdscr, state, selected)
-                state._dirty = True
-                state.recompute_estimate()
+                if state._snapshot() != before:
+                    state._dirty = True
+                    state.recompute_estimate()
             else:
                 # Finalize
                 try:
@@ -1427,7 +1450,7 @@ def main(stdscr):
                 # Copy all fields from loaded state into current state
                 for attr in vars(loaded_state):
                     setattr(state, attr, getattr(loaded_state, attr))
-                state._dirty = True
+                state._dirty = False
                 state.recompute_estimate()
         elif key in (ord('q'), ord('Q')):
             if state._dirty:

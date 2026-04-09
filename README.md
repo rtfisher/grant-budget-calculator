@@ -30,7 +30,7 @@ The TUI reads default rates from `budget.par` and presents a menu where you navi
 
 - **Arrow keys** navigate budget categories (Agency & Program, Project Dates, Senior Investigators, Graduate Students, Postdocs, etc.)
 - **Enter** opens a sub-screen to edit values for that category
-- **V** opens a read-only budget summary viewer (Tab toggles between NSF and NASA R&R formats)
+- **V** opens a read-only budget summary viewer (Tab toggles between NSF and Federal R&R formats)
 - **F** finalizes the budget and displays results in a scrollable view
 - **S** saves results to a log file (on the results screen)
 - **L** loads a previously saved budget from a log file
@@ -88,7 +88,7 @@ Consult with your institutional office of research administration for current ra
 The calculator produces two budget tables:
 
 1. **NSF-style detailed table** -- Line-by-line breakdown of all salary, fringe, and cost components.
-2. **NASA R&R budget format** -- Standard federal R&R categories (A-K): Senior/Key Person, Other Personnel, Equipment, Travel, Participant/Trainee Support, Other Direct Costs, Direct/Indirect totals, Fee, and Budget Total.
+2. **Federal Research & Related (R&R) budget format** -- Standard federal R&R categories (A-K) used by NASA, DOE, NIH, and other Grants.gov agencies: Senior/Key Person, Other Personnel, Equipment, Travel, Participant/Trainee Support, Other Direct Costs, Direct/Indirect totals, Fee, and Budget Total.
 
 ## Logging
 
@@ -111,9 +111,10 @@ Log files contain sufficient detail to fully restore budget state via the **L: L
 
 ```bash
 pip install pytest
-pytest                                    # run all tests
-pytest tests/test_budget_partial_years.py  # calculation engine tests
-pytest tests/test_budget_tui.py            # TUI tests
+pytest                                    # run all tests (203 total)
+pytest tests/test_budget_partial_years.py  # calculation engine tests (75)
+pytest tests/test_budget_tui.py            # TUI tests (109)
+pytest tests/test_additional_coverage.py   # additional coverage tests (19)
 ```
 
 CI runs on Python 3.9 and 3.12 via GitHub Actions on every push and PR to main.

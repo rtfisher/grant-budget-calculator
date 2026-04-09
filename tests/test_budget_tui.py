@@ -16,7 +16,7 @@ from budget_tui import (
     summary_postdocs, summary_travel, summary_equipment,
     summary_subawards, summary_rates, summary_agency,
     generate_log_filename, parse_log_file, format_results,
-    format_nsf_table, format_nasa_table,
+    format_nsf_table, format_nasa_table, write_log,
 )
 from budget_partial_years import calculate_budget, dollar
 
@@ -780,7 +780,7 @@ class TestFormatNasaTable:
         results = state.finalize()
         lines = format_nasa_table(results, state)
         text = "\n".join(lines)
-        assert "NASA R&R Budget Format" in text
+        assert "Federal Research & Related (R&R) Budget Format" in text
         assert "A. Senior/Key Person" in text
         assert "K. Budget Total (I + J)" in text
 
@@ -799,7 +799,7 @@ class TestFormatNasaTable:
         full = format_results(results, state)
         text = "\n".join(full)
         assert "Faculty Salary" in text
-        assert "NASA R&R Budget Format" in text
+        assert "Federal Research & Related (R&R) Budget Format" in text
         assert "K. Budget Total (I + J)" in text
 
     def test_nsf_and_nasa_totals_match(self):
@@ -820,3 +820,241 @@ class TestFormatNasaTable:
         nsf_totals = re.findall(r'\$[\d,]+\.\d+', nsf_total_line)
         nasa_totals = re.findall(r'\$[\d,]+\.\d+', nasa_total_line)
         assert nsf_totals[-1] == nasa_totals[-1]
+
+
+# ── parse_log_file malformed input ─────────────────────────────────
+
+
+class TestParseLogFileMalformed:
+    def test_empty_file(self, tmp_path):
+        """Empty file should return a default BudgetState (no fields parsed)."""
+        log_file = tmp_path / "empty.log"
+        log_file.write_text("")
+        state = parse_log_file(str(log_file))
+        # No fields match, so we get all defaults from BudgetState.__init__
+        assert state.number_years == 3
+        assert state.agency == ""
+        assert len(state.pis) == 1
+
+    def test_missing_number_of_years(self, tmp_path):
+        """Log file with some fields but no 'Number of years' line."""
+        log_file = tmp_path / "missing_years.log"
+        log_file.write_text(
+            "  Agency                       = nsf\n"
+            "  Travel                       = $5,000.00\n"
+        )
+        state = parse_log_file(str(log_file))
+        assert state.agency == "nsf"
+        assert state.travel == 5000
+        # number_years falls back to BudgetState default
+        assert state.number_years == 3
+
+    def test_corrupted_dollar_amount(self, tmp_path):
+        """A line like 'Travel = $not_a_number' should raise ValueError."""
+        log_file = tmp_path / "corrupted.log"
+        log_file.write_text(
+            "  Number of years              = 3\n"
+            "  Travel                       = $not_a_number\n"
+        )
+        # parse_dollar strips '$' and ',' then calls float(), which will raise
+        with pytest.raises(ValueError):
+            parse_log_file(str(log_file))
+
+    def test_missing_pi_section(self, tmp_path):
+        """Log with no PI salary info should not crash."""
+        log_file = tmp_path / "no_pis.log"
+        log_file.write_text(
+            "  Number of years              = 2\n"
+            "  Travel                       = $1,000.00\n"
+            "  Indirect rate                = 0.55\n"
+        )
+        state = parse_log_file(str(log_file))
+        assert state.number_years == 2
+        assert state.travel == 1000
+        # No "Number of faculty" line, so pis stays at default
+        assert len(state.pis) == 1
+
+    def test_minimal_valid_log(self, tmp_path):
+        """A log with just 'Number of years = 3' and nothing else."""
+        log_file = tmp_path / "minimal.log"
+        log_file.write_text("  Number of years              = 3\n")
+        state = parse_log_file(str(log_file))
+        assert state.number_years == 3
+        # All other fields should be defaults
+        assert state.agency == ""
+        assert state.travel == 0
+        assert state.equipment == 0
+        assert state.indirect_rate == 0.59
+        assert state.subaward == [0, 0, 0]
+
+
+# ── BudgetState._snapshot() tests ─────────────────────────────────
+
+
+class TestBudgetStateSnapshot:
+    def test_identical_states_same_snapshot(self):
+        s1 = BudgetState()
+        s2 = BudgetState()
+        assert s1._snapshot() == s2._snapshot()
+
+    def test_different_after_field_change(self):
+        state = BudgetState()
+        snap_before = state._snapshot()
+        state.agency = "nasa"
+        assert state._snapshot() != snap_before
+
+    def test_pi_change_detected(self):
+        state = BudgetState()
+        snap_before = state._snapshot()
+        state.pis[0].base_salary = 120000
+        assert state._snapshot() != snap_before
+
+    def test_pi_summer_months_change_detected(self):
+        state = BudgetState()
+        snap_before = state._snapshot()
+        state.pis[0].summer_months = 2.0
+        assert state._snapshot() != snap_before
+
+    def test_subaward_change_detected(self):
+        state = BudgetState()
+        snap_before = state._snapshot()
+        state.subaward[1] = 50000
+        assert state._snapshot() != snap_before
+
+    def test_all_public_fields_covered(self):
+        """Every public attribute of BudgetState should be represented in _snapshot.
+        Changing any one should produce a different snapshot."""
+        # Map of field name -> value that differs from default
+        field_changes = {
+            "agency": "nasa",
+            "program_call": "compass",
+            "use_dates": True,
+            "start_date": date(2026, 1, 1),
+            "end_date": date(2029, 1, 1),
+            "number_years": 5,
+            "number_grads": 3,
+            "grad_stipend_per": 30000,
+            "grad_fees_per": 20000.0,
+            "grad_ins_per": 2000.0,
+            "undergrad_salary": 5000,
+            "postdoc_salary": 60000,
+            "postdoc_health": 3000,
+            "travel": 5000,
+            "pub_costs": 1000,
+            "equipment": 10000,
+            "indirect_rate": 0.50,
+            "fringe_rate": 0.03,
+            "fulltime_fringe": 0.40,
+            "inflation": 0.05,
+        }
+        # pis and subaward are tested separately (they are mutable containers)
+        for field, new_val in field_changes.items():
+            state = BudgetState()
+            snap_before = state._snapshot()
+            setattr(state, field, new_val)
+            snap_after = state._snapshot()
+            assert snap_before != snap_after, (
+                f"Changing '{field}' did not change _snapshot()"
+            )
+
+
+# ── validate_field edge cases ──────────────────────────────────────
+
+
+class TestValidateFieldEdgeCases:
+    def test_empty_string_for_numeric(self):
+        """Empty string for a numeric (int) field should fail validation."""
+        state = BudgetState()
+        ok, val, err = state.validate_field("equipment", "equipment", "")
+        assert ok is False
+
+    def test_negative_salary(self):
+        """Negative salary should be rejected."""
+        state = BudgetState()
+        ok, val, err = state.validate_field("postdocs", "postdoc_salary", "-50000")
+        assert ok is False
+
+    def test_zero_number_years(self):
+        """'0' for number_years — int validation accepts 0 (>= 0 check)."""
+        state = BudgetState()
+        ok, val, err = state.validate_field("project_dates", "number_years", "0")
+        assert ok is True
+        assert val == 0
+
+    def test_very_large_number(self):
+        """Extremely large number should still parse as valid int."""
+        state = BudgetState()
+        ok, val, err = state.validate_field("equipment", "equipment", "999999999999")
+        assert ok is True
+        assert val == 999999999999
+
+    def test_non_numeric_string(self):
+        """'abc' for a numeric field should fail."""
+        state = BudgetState()
+        ok, val, err = state.validate_field("travel", "travel", "abc")
+        assert ok is False
+
+    def test_empty_string_for_float(self):
+        """Empty string for a float field should fail."""
+        state = BudgetState()
+        ok, val, err = state.validate_field("rates_inflation", "indirect_rate", "")
+        assert ok is False
+
+    def test_negative_float(self):
+        """Negative float for a rate field should fail."""
+        state = BudgetState()
+        ok, val, err = state.validate_field("rates_inflation", "inflation", "-0.05")
+        assert ok is False
+
+
+# ── generate_log_filename edge cases (write_log alternatives) ──────
+
+
+class TestWriteLog:
+    def test_write_creates_file(self, tmp_path):
+        """write_log should create a file with expected content."""
+        path = str(tmp_path / "test_output.log")
+        lines = ["Line 1", "Line 2", "Line 3"]
+        write_log(lines, path)
+        assert os.path.exists(path)
+        content = open(path).read()
+        assert "Line 1" in content
+        assert "Line 2" in content
+        assert "Line 3" in content
+
+    def test_write_appends(self, tmp_path):
+        """Calling write_log twice should append, not overwrite."""
+        path = str(tmp_path / "append_test.log")
+        write_log(["First call"], path)
+        write_log(["Second call"], path)
+        content = open(path).read()
+        assert "First call" in content
+        assert "Second call" in content
+        # Should have two separator lines (one per call)
+        assert content.count("=" * 60) == 2
+
+    def test_special_characters_in_agency(self, tmp_path, monkeypatch):
+        """Agency with spaces or special chars in filename generation."""
+        monkeypatch.chdir(tmp_path)
+        name = generate_log_filename("My Agency!", "test")
+        assert " " not in name
+        assert "!" not in name
+        assert name.endswith(".log")
+
+    def test_empty_program_call(self, tmp_path, monkeypatch):
+        """Empty string for program_call."""
+        monkeypatch.chdir(tmp_path)
+        name = generate_log_filename("nsf", "")
+        assert name.startswith("nsf_")
+        assert name.endswith(".log")
+
+    def test_version_increment(self, tmp_path, monkeypatch):
+        """Create files that would collide and verify versioning works."""
+        monkeypatch.chdir(tmp_path)
+        name1 = generate_log_filename("test", "prog")
+        (tmp_path / name1).write_text("v1")
+        name2 = generate_log_filename("test", "prog")
+        assert "_v2" in name2
+        (tmp_path / name2).write_text("v2")
+        name3 = generate_log_filename("test", "prog")
+        assert "_v3" in name3
