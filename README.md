@@ -11,7 +11,7 @@ A Python tool for calculating research grant budgets with year-by-year inflation
 | `budget_tui.py` | Curses-based TUI -- menu-driven interface with live totals |
 | `budget_partial_years.py` | Calculation engine and CLI alternative |
 | `budget.par` | Editable parameter file with institutional rates and default values |
-| `budget.log` | Append-only log of all runs (auto-generated) |
+| `*.log` | Budget log files, named by agency/program/date (auto-generated) |
 
 ## Quick Start
 
@@ -28,13 +28,23 @@ The TUI reads default rates from `budget.par` and presents a menu where you navi
 
 `budget_tui.py` provides a Pine/Alpine-style menu interface:
 
-- **Arrow keys** navigate budget categories (Project Dates, Senior Investigators, Graduate Students, Postdocs, etc.)
+- **Arrow keys** navigate budget categories (Agency & Program, Project Dates, Senior Investigators, Graduate Students, Postdocs, etc.)
 - **Enter** opens a sub-screen to edit values for that category
+- **V** opens a read-only budget summary viewer (Tab toggles between NSF and NASA R&R formats)
 - **F** finalizes the budget and displays results in a scrollable view
-- **S** saves results to `budget.log` (on the results screen)
+- **S** saves results to a log file (on the results screen)
+- **L** loads a previously saved budget from a log file
 - **Q** quits (with confirmation if unsaved)
 
 The TUI supports partial budget periods via the Project Dates menu item (Tab toggles between date mode and year mode).
+
+### Agency & Program
+
+The first menu item lets you set the funding agency (e.g., "nasa", "nsf") and program call (e.g., "compass", "aag"). These are combined with today's date to generate unique log filenames like `nasa_compass_040826.log`. Duplicate filenames auto-increment: `nasa_compass_040826_v2.log`, etc.
+
+### Loading a Previous Budget
+
+Press **L** from the main menu to see a list of `.log` files in the current directory sorted by modification time. Selecting one parses the log and restores all budget fields, including agency, dates, PI details, salaries, rates, and subaward values.
 
 ## Parameter File (`budget.par`)
 
@@ -67,7 +77,7 @@ Consult with your institutional office of research administration for current ra
 
 - Specify a **project start date** and **end date** (any dates -- no restriction to 1st of month).
 - Budget periods are split at anniversary boundaries of the start date. The last period may be shorter.
-- All annual costs are prorated by `days / 365.25` for each period. Equipment and subaward values are per-period and not scaled.
+- Salaries, stipends, fees, and health insurance are prorated by `days / 365.25` for each period. Equipment, travel, publication costs, and subaward values are fixed per-period and not scaled.
 - **Summer months** (June, July, August) for graduate FICA are computed from the actual calendar overlap of each period, rather than using a hardcoded 3/12 fraction.
 - Inflation compounds as `(1 + r) ^ frac` for fractional periods.
 - The subaward indirect cap ($25k) is prorated for fractional periods.
@@ -82,11 +92,14 @@ The calculator produces two budget tables:
 
 ## Logging
 
-Each run appends a timestamped record to `budget.log` containing:
-- All input parameters as entered
+Each save creates a uniquely named log file (e.g., `nasa_compass_040826.log`) containing:
+- Agency and program call
+- All input parameters as entered (including per-student grad values)
 - Per-PI base salary and summer months (for full reproducibility)
-- Year-by-year budget breakdown
+- Year-by-year budget breakdown (NSF and NASA formats)
 - Final summary totals
+
+Log files contain sufficient detail to fully restore budget state via the **L: Load** feature.
 
 ## Requirements
 

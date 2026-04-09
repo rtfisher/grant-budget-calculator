@@ -14,7 +14,9 @@ from budget_tui import (
     BudgetState, PIInfo, MENU_ITEMS,
     summary_dates, summary_pis, summary_grads, summary_undergrad,
     summary_postdocs, summary_travel, summary_equipment,
-    summary_subawards, summary_rates,
+    summary_subawards, summary_rates, summary_agency,
+    generate_log_filename, parse_log_file, format_results,
+    format_nsf_table, format_nasa_table,
 )
 from budget_partial_years import calculate_budget, dollar
 
@@ -30,8 +32,8 @@ class TestBudgetStateInit:
         assert state.pis[0].base_salary == 0
         assert state.pis[0].summer_months == 0.0
         assert state.grad_stipend_per == 0
-        assert state.grad_fees_per == 0.0
-        assert state.grad_ins_per == 0.0
+        assert state.grad_fees_per == 14500.0
+        assert state.grad_ins_per == 1232.0
         assert state.undergrad_salary == 0
         assert state.postdoc_salary == 0
         assert state.postdoc_health == 0
@@ -176,11 +178,12 @@ class TestRecomputeEstimate:
         est2 = state.recompute_estimate()
         assert est2 > est1
 
-    def test_zero_for_zeroed_defaults(self):
-        """With zeroed budget.par defaults, estimate should be 0."""
+    def test_nonzero_with_par_defaults(self):
+        """With budget.par defaults (grad fees/insurance set), estimate reflects those."""
         state = BudgetState.from_par_file(PAR_FILE)
         est = state.recompute_estimate()
-        assert est == 0.0
+        # grad_fees and grad_insurance are non-zero in budget.par
+        assert est > 0
 
     def test_positive_with_values(self):
         state = BudgetState.from_par_file(PAR_FILE)
@@ -382,8 +385,8 @@ class TestFinalize:
 
 
 class TestMenuItems:
-    def test_nine_categories(self):
-        assert len(MENU_ITEMS) == 9
+    def test_ten_categories(self):
+        assert len(MENU_ITEMS) == 10
 
     def test_all_have_label_and_function(self):
         for label, fn in MENU_ITEMS:
@@ -395,3 +398,425 @@ class TestMenuItems:
         for label, fn in MENU_ITEMS:
             result = fn(state)
             assert isinstance(result, str), f"{label} summary_fn did not return string"
+
+
+# ── Agency & Program fields ─────────────────────────────────────────
+
+
+class TestAgencyProgramFields:
+    def test_default_empty(self):
+        state = BudgetState()
+        assert state.agency == ""
+        assert state.program_call == ""
+
+    def test_from_par_file_empty(self):
+        state = BudgetState.from_par_file(PAR_FILE)
+        assert state.agency == ""
+        assert state.program_call == ""
+
+    def test_validate_agency_any_string(self):
+        state = BudgetState()
+        ok, val, err = state.validate_field("agency", "agency", "NASA")
+        assert ok is True
+        assert val == "NASA"
+
+    def test_validate_program_call_any_string(self):
+        state = BudgetState()
+        ok, val, err = state.validate_field("agency", "program_call", "COMPASS")
+        assert ok is True
+        assert val == "COMPASS"
+
+    def test_validate_empty_string(self):
+        state = BudgetState()
+        ok, val, err = state.validate_field("agency", "agency", "")
+        assert ok is True
+        assert val == ""
+
+
+# ── summary_agency ──────────────────────────────────────────────────
+
+
+class TestSummaryAgency:
+    def test_both_set(self):
+        state = BudgetState()
+        state.agency = "nasa"
+        state.program_call = "compass"
+        assert summary_agency(state) == "nasa / compass"
+
+    def test_only_agency(self):
+        state = BudgetState()
+        state.agency = "nsf"
+        assert summary_agency(state) == "nsf"
+
+    def test_only_program(self):
+        state = BudgetState()
+        state.program_call = "aag"
+        assert summary_agency(state) == "aag"
+
+    def test_neither_set(self):
+        state = BudgetState()
+        assert summary_agency(state) == "(not set)"
+
+
+# ── generate_log_filename ───────────────────────────────────────────
+
+
+class TestGenerateLogFilename:
+    def test_basic_filename(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        name = generate_log_filename("nasa", "compass")
+        # Should match pattern: nasa_compass_MMDDYY.log
+        assert name.startswith("nasa_compass_")
+        assert name.endswith(".log")
+
+    def test_empty_agency_and_call(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        name = generate_log_filename("", "")
+        assert name.startswith("budget_")
+        assert name.endswith(".log")
+
+    def test_only_agency(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        name = generate_log_filename("nsf", "")
+        assert name.startswith("nsf_")
+        assert name.endswith(".log")
+
+    def test_only_call(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        name = generate_log_filename("", "aag")
+        assert name.startswith("aag_")
+        assert name.endswith(".log")
+
+    def test_versioning(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        name1 = generate_log_filename("nasa", "compass")
+        # Create the first file
+        (tmp_path / name1).write_text("test")
+        name2 = generate_log_filename("nasa", "compass")
+        assert "_v2" in name2
+        # Create v2
+        (tmp_path / name2).write_text("test")
+        name3 = generate_log_filename("nasa", "compass")
+        assert "_v3" in name3
+
+    def test_sanitizes_special_chars(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        name = generate_log_filename("NASA", "My Program!")
+        assert "nasa" in name
+        assert "my_program" in name
+        assert "!" not in name
+
+    def test_sanitizes_spaces(self, tmp_path, monkeypatch):
+        monkeypatch.chdir(tmp_path)
+        name = generate_log_filename("my agency", "call name")
+        assert " " not in name
+
+
+# ── parse_log_file ──────────────────────────────────────────────────
+
+
+class TestParseLogFile:
+    SAMPLE_LOG = """============================================================
+Basic Grant Budget Calculator (TUI)
+Run: 2026-04-08 14:30:00
+  Agency                       = nasa
+  Program call                 = compass
+
+Input Parameters
+---------------------------------
+  Project start              = 2026-09-01
+  Project end                = 2029-06-01
+  Period 1                   = 2026-09-01 to 2027-09-01 (365 days, 3 summer)
+  Period 2                   = 2027-09-01 to 2028-09-01 (366 days, 3 summer)
+  Period 3                   = 2028-09-01 to 2029-06-01 (273 days, 0 summer)
+  Number of years              = 3
+  Number of faculty            = 2
+    PI 1: base 9-month salary = $100,000.00, summer months = 0.25, contribution = $2,777.78
+    PI 2: base 9-month salary = $150,000.00, summer months = 1.0, contribution = $16,666.67
+  Number of graduate students   = 2
+  Grad stipend (per student)   = $26,000.00
+  Grad fees (per student)      = $14,500.00
+  Grad insurance (per student) = $1,232.00
+  Faculty salary (year 1)      = $19,444.44
+  Graduate stipend             = $52,000.00
+  Graduate tuition + fees      = $29,000.00
+  Graduate health insurance    = $2,464.00
+  Undergraduate salary         = $5,000.00
+  Postdoc salary               = $60,000.00
+  Postdoc health               = $3,000.00
+  Equipment                    = $15,000.00
+  Travel                       = $2,500.00
+  Publication costs            = $1,000.00
+  Subawards                    = [10000, 5000, 0]
+  Indirect rate                = 0.59
+  Fringe (payroll tax) rate    = 0.0221
+  Full-time fringe rate        = 0.3781
+  Inflation rate               = 0.03
+
+"""
+
+    def test_parse_agency(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text(self.SAMPLE_LOG)
+        state = parse_log_file(str(log_file))
+        assert state.agency == "nasa"
+        assert state.program_call == "compass"
+
+    def test_parse_dates(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text(self.SAMPLE_LOG)
+        state = parse_log_file(str(log_file))
+        assert state.use_dates is True
+        assert state.start_date == date(2026, 9, 1)
+        assert state.end_date == date(2029, 6, 1)
+
+    def test_parse_number_years(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text(self.SAMPLE_LOG)
+        state = parse_log_file(str(log_file))
+        assert state.number_years == 3
+
+    def test_parse_pis(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text(self.SAMPLE_LOG)
+        state = parse_log_file(str(log_file))
+        assert len(state.pis) == 2
+        assert state.pis[0].base_salary == 100000
+        assert state.pis[0].summer_months == 0.25
+        assert state.pis[1].base_salary == 150000
+        assert state.pis[1].summer_months == 1.0
+
+    def test_parse_grad_students(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text(self.SAMPLE_LOG)
+        state = parse_log_file(str(log_file))
+        assert state.number_grads == 2
+        assert state.grad_stipend_per == 26000
+        assert state.grad_fees_per == pytest.approx(14500.0)
+        assert state.grad_ins_per == pytest.approx(1232.0)
+
+    def test_parse_other_salaries(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text(self.SAMPLE_LOG)
+        state = parse_log_file(str(log_file))
+        assert state.undergrad_salary == 5000
+        assert state.postdoc_salary == 60000
+        assert state.postdoc_health == 3000
+
+    def test_parse_costs(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text(self.SAMPLE_LOG)
+        state = parse_log_file(str(log_file))
+        assert state.equipment == 15000
+        assert state.travel == 2500
+        assert state.pub_costs == 1000
+
+    def test_parse_subawards(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text(self.SAMPLE_LOG)
+        state = parse_log_file(str(log_file))
+        assert state.subaward == [10000, 5000, 0]
+
+    def test_parse_rates(self, tmp_path):
+        log_file = tmp_path / "test.log"
+        log_file.write_text(self.SAMPLE_LOG)
+        state = parse_log_file(str(log_file))
+        assert state.indirect_rate == pytest.approx(0.59)
+        assert state.fringe_rate == pytest.approx(0.0221)
+        assert state.fulltime_fringe == pytest.approx(0.3781)
+        assert state.inflation == pytest.approx(0.03)
+
+    def test_roundtrip_format_then_parse(self):
+        """format_results + parse_log_file should roundtrip all state."""
+        import tempfile
+        state = BudgetState.from_par_file(PAR_FILE)
+        state.agency = "doe"
+        state.program_call = "fusion"
+        state.pis = [PIInfo(base_salary=120000, summer_months=0.5)]
+        state.number_grads = 1
+        state.grad_stipend_per = 30000
+        state.grad_fees_per = 15000.0
+        state.grad_ins_per = 1500.0
+        state.undergrad_salary = 4000
+        state.postdoc_salary = 55000
+        state.postdoc_health = 2800
+        state.travel = 3000
+        state.pub_costs = 500
+        state.equipment = 10000
+        state.subaward = [5000, 10000, 0]
+        state.indirect_rate = 0.55
+        state.fringe_rate = 0.025
+        state.fulltime_fringe = 0.35
+        state.inflation = 0.04
+
+        results = state.finalize()
+        lines = format_results(results, state)
+
+        # Write to temp file and parse back
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.log', delete=False) as f:
+            for line in lines:
+                f.write(line + "\n")
+            tmp_file = f.name
+
+        try:
+            loaded = parse_log_file(tmp_file)
+            assert loaded.agency == "doe"
+            assert loaded.program_call == "fusion"
+            assert len(loaded.pis) == 1
+            assert loaded.pis[0].base_salary == 120000
+            assert loaded.pis[0].summer_months == pytest.approx(0.5)
+            assert loaded.number_grads == 1
+            assert loaded.grad_stipend_per == 30000
+            assert loaded.grad_fees_per == pytest.approx(15000.0)
+            assert loaded.grad_ins_per == pytest.approx(1500.0)
+            assert loaded.undergrad_salary == 4000
+            assert loaded.postdoc_salary == 55000
+            assert loaded.postdoc_health == 2800
+            assert loaded.travel == 3000
+            assert loaded.pub_costs == 500
+            assert loaded.equipment == 10000
+            assert loaded.subaward == [5000, 10000, 0]
+            assert loaded.indirect_rate == pytest.approx(0.55)
+            assert loaded.fringe_rate == pytest.approx(0.025)
+            assert loaded.fulltime_fringe == pytest.approx(0.35)
+            assert loaded.inflation == pytest.approx(0.04)
+            assert loaded.number_years == 3
+        finally:
+            os.unlink(tmp_file)
+
+    def test_parse_no_dates(self, tmp_path):
+        """Log without date fields should leave use_dates=False."""
+        log_content = """============================================================
+Basic Grant Budget Calculator (TUI)
+Run: 2026-04-08 14:30:00
+
+Input Parameters
+---------------------------------
+  Number of years              = 3
+  Number of faculty            = 1
+    PI 1: base 9-month salary = $100,000.00, summer months = 0.25, contribution = $2,777.78
+  Number of graduate students   = 1
+  Grad stipend (per student)   = $26,000.00
+  Grad fees (per student)      = $14,500.00
+  Grad insurance (per student) = $1,232.00
+  Faculty salary (year 1)      = $2,777.78
+  Graduate stipend             = $26,000.00
+  Graduate tuition + fees      = $14,500.00
+  Graduate health insurance    = $1,232.00
+  Undergraduate salary         = $0.00
+  Postdoc salary               = $0.00
+  Postdoc health               = $0.00
+  Equipment                    = $0.00
+  Travel                       = $2,500.00
+  Publication costs            = $0.00
+  Subawards                    = [0, 0, 0]
+  Indirect rate                = 0.59
+  Fringe (payroll tax) rate    = 0.0221
+  Full-time fringe rate        = 0.3781
+  Inflation rate               = 0.03
+
+"""
+        log_file = tmp_path / "test.log"
+        log_file.write_text(log_content)
+        state = parse_log_file(str(log_file))
+        assert state.use_dates is False
+        assert state.start_date is None
+        assert state.end_date is None
+        assert state.number_years == 3
+
+
+# ── NSF / NASA table formatting ───────────────────────────────────
+
+
+class TestFormatNsfTable:
+    def test_returns_list_of_strings(self):
+        state = BudgetState.from_par_file(PAR_FILE)
+        results = state.finalize()
+        lines = format_nsf_table(results, state)
+        assert isinstance(lines, list)
+        assert all(isinstance(l, str) for l in lines)
+
+    def test_contains_key_line_items(self):
+        state = BudgetState.from_par_file(PAR_FILE)
+        state.pis = [PIInfo(base_salary=100000, summer_months=0.25)]
+        state.travel = 2500
+        results = state.finalize()
+        lines = format_nsf_table(results, state)
+        text = "\n".join(lines)
+        assert "Faculty Salary" in text
+        assert "Total Budget" in text
+        assert "Modified Total Direct Costs" in text
+        assert "Indirect" in text
+
+    def test_contains_year_headers(self):
+        state = BudgetState.from_par_file(PAR_FILE)
+        results = state.finalize()
+        lines = format_nsf_table(results, state)
+        text = "\n".join(lines)
+        assert "Year 1" in text
+        assert "Year 2" in text
+        assert "Year 3" in text
+        assert "Total" in text
+
+    def test_does_not_contain_nasa(self):
+        state = BudgetState.from_par_file(PAR_FILE)
+        results = state.finalize()
+        lines = format_nsf_table(results, state)
+        text = "\n".join(lines)
+        assert "NASA" not in text
+        assert "Senior/Key Person" not in text
+
+
+class TestFormatNasaTable:
+    def test_returns_list_of_strings(self):
+        state = BudgetState.from_par_file(PAR_FILE)
+        results = state.finalize()
+        lines = format_nasa_table(results, state)
+        assert isinstance(lines, list)
+        assert all(isinstance(l, str) for l in lines)
+
+    def test_contains_nasa_line_items(self):
+        state = BudgetState.from_par_file(PAR_FILE)
+        results = state.finalize()
+        lines = format_nasa_table(results, state)
+        text = "\n".join(lines)
+        assert "NASA R&R Budget Format" in text
+        assert "A. Senior/Key Person" in text
+        assert "K. Budget Total (I + J)" in text
+
+    def test_does_not_contain_nsf_detail(self):
+        state = BudgetState.from_par_file(PAR_FILE)
+        results = state.finalize()
+        lines = format_nasa_table(results, state)
+        text = "\n".join(lines)
+        assert "Faculty Salary" not in text
+        assert "Graduate Tuition" not in text
+
+    def test_format_results_includes_both(self):
+        """format_results should contain both NSF and NASA tables."""
+        state = BudgetState.from_par_file(PAR_FILE)
+        results = state.finalize()
+        full = format_results(results, state)
+        text = "\n".join(full)
+        assert "Faculty Salary" in text
+        assert "NASA R&R Budget Format" in text
+        assert "K. Budget Total (I + J)" in text
+
+    def test_nsf_and_nasa_totals_match(self):
+        """The total budget from NSF and NASA tables should agree."""
+        state = BudgetState.from_par_file(PAR_FILE)
+        state.pis = [PIInfo(base_salary=100000, summer_months=0.5)]
+        state.travel = 3000
+        state.pub_costs = 500
+        results = state.finalize()
+        nsf_lines = format_nsf_table(results, state)
+        nasa_lines = format_nasa_table(results, state)
+        # Extract the "Total Budget" line from NSF
+        nsf_total_line = [l for l in nsf_lines if "Total Budget" in l][0]
+        # Extract "K. Budget Total" line from NASA
+        nasa_total_line = [l for l in nasa_lines if "K. Budget Total" in l][0]
+        # Both should contain the same total (last dollar amount on the line)
+        import re
+        nsf_totals = re.findall(r'\$[\d,]+\.\d+', nsf_total_line)
+        nasa_totals = re.findall(r'\$[\d,]+\.\d+', nasa_total_line)
+        assert nsf_totals[-1] == nasa_totals[-1]

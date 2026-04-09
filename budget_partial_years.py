@@ -107,7 +107,8 @@ def calculate_budget(number_years, faculty_salary, grad_salary, grad_fees, grad_
 
     All salary/fee arguments are year-1 *annual* values; inflation is applied
     for subsequent years inside this function.  The subaward argument is a list
-    of length number_years.  Equipment is a fixed yearly cost (no inflation).
+    of length number_years.  Equipment, travel, and pub_costs are fixed
+    per-period costs (no inflation, no partial-year prorating).
 
     When period_fractions is None, all periods are treated as full 12-month
     years (backward-compatible with budget.py).  When provided, it must be a
@@ -147,8 +148,9 @@ def calculate_budget(number_years, faculty_salary, grad_salary, grad_fees, grad_
         undergrad_salary_period = undergrad_salary * frac
         postdoc_salary_period = postdoc_salary * frac
         postdoc_health_period = postdoc_health * frac
-        travel_period = travel * frac
-        pub_costs_period = pub_costs * frac
+        # Travel and publication costs are fixed per period (not prorated)
+        travel_period = travel
+        pub_costs_period = pub_costs
 
         fringe = ((summer_frac * grad_salary + undergrad_salary_period + faculty_salary_period) * fringe_rate
                   + fulltime_fringe * postdoc_salary_period)

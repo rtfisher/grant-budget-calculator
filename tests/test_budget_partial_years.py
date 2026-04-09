@@ -229,9 +229,17 @@ class TestCalculateBudgetPartialPeriods:
             subaward=[0], period_fractions=[self._half_year_pf()])
         d = r["details"][0]
         assert d["faculty_salary"] == pytest.approx(self.BASE_INPUTS["faculty_salary"] * frac)
-        assert d["travel"] == pytest.approx(self.BASE_INPUTS["travel"] * frac)
         assert d["grad_salary"] == pytest.approx(self.BASE_INPUTS["grad_salary"] * frac)
         assert d["postdoc_salary"] == pytest.approx(self.BASE_INPUTS["postdoc_salary"] * frac)
+
+    def test_travel_pub_not_scaled(self):
+        """Travel and publication costs are fixed per period (not prorated)."""
+        r = calculate_budget(
+            number_years=1, **self.BASE_INPUTS,
+            subaward=[0], period_fractions=[self._half_year_pf()])
+        d = r["details"][0]
+        assert d["travel"] == self.BASE_INPUTS["travel"]
+        assert d["pub_costs"] == self.BASE_INPUTS["pub_costs"]
 
     def test_equipment_not_scaled(self):
         """Equipment should NOT be prorated by period fraction."""

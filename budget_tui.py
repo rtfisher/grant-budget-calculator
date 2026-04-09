@@ -8,6 +8,8 @@ budget_partial_years.py.
 
 import os
 import sys
+import re
+import glob
 import curses
 from datetime import datetime, date
 
@@ -17,7 +19,39 @@ from budget_partial_years import (
 )
 
 PAR_FILE = "budget.par"
-LOG_FILE = "budget.log"
+
+
+def generate_log_filename(agency, program_call):
+    """Generate a unique log filename: agency_call_MMDDYY[_vN].log"""
+    today = datetime.now().strftime("%m%d%y")
+
+    # Sanitize: lowercase, replace non-alphanumeric with underscores
+    def sanitize(s):
+        return "".join(c if c.isalnum() else "_" for c in s.lower()).strip("_")
+
+    parts = []
+    if agency:
+        parts.append(sanitize(agency))
+    if program_call:
+        parts.append(sanitize(program_call))
+
+    if not parts:
+        base = f"budget_{today}"
+    else:
+        base = "_".join(parts) + f"_{today}"
+
+    # Return first available filename (no version suffix, then _v2, _v3, ...)
+    candidate = f"{base}.log"
+    if not os.path.exists(candidate):
+        return candidate
+
+    version = 2
+    while True:
+        candidate = f"{base}_v{version}.log"
+        if not os.path.exists(candidate):
+            return candidate
+        version += 1
+
 
 MIN_WIDTH = 80
 MIN_HEIGHT = 24
@@ -34,6 +68,8 @@ class PIInfo:
 
 class BudgetState:
     def __init__(self):
+        self.agency = ""          # e.g. "nasa", "nsf"
+        self.program_call = ""    # e.g. "compass", "aag"
         self.use_dates = False
         self.start_date = None
         self.end_date = None
@@ -61,6 +97,8 @@ class BudgetState:
     def from_par_file(cls, path):
         params = load_parameters(path)
         state = cls()
+        state.agency = ""
+        state.program_call = ""
         state.pis = [PIInfo(
             base_salary=int(params.get("faculty_base_salary", "100000")),
             summer_months=float(params.get("faculty_months", "0.25")),
@@ -130,6 +168,8 @@ class BudgetState:
 
     def validate_field(self, category, field_name, value):
         """Validate a raw string. Returns (ok, parsed_value, error_msg)."""
+        if field_name in ("agency", "program_call"):
+            return True, value, ""
         if field_name in ("start_date", "end_date"):
             try:
                 d = datetime.strptime(value, "%Y-%m-%d").date()
@@ -158,6 +198,16 @@ class BudgetState:
 
 
 # ── Summary functions ───────────────────────────────────────────────
+
+
+def summary_agency(state):
+    if state.agency and state.program_call:
+        return f"{state.agency} / {state.program_call}"
+    if state.agency:
+        return state.agency
+    if state.program_call:
+        return state.program_call
+    return "(not set)"
 
 
 def summary_dates(state):
@@ -207,6 +257,7 @@ def summary_rates(state):
 
 
 MENU_ITEMS = [
+    ("Agency & Program", summary_agency),
     ("Project Dates", summary_dates),
     ("Senior Investigators", summary_pis),
     ("Graduate Students", summary_grads),
@@ -277,10 +328,18 @@ class FieldEditor:
 
 
 def format_results(results, state):
-    """Format budget results as a list of strings for display and logging."""
+    """Format budget results as a list of strings for display and logging.
+
+    Returns the full output (header + input params + NSF table + NASA table).
+    Use format_nsf_table() or format_nasa_table() for individual views.
+    """
     lines = []
     lines.append("Basic Grant Budget Calculator (TUI)")
     lines.append(f"Run: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    if state.agency:
+        lines.append(f"  Agency                       = {state.agency}")
+    if state.program_call:
+        lines.append(f"  Program call                 = {state.program_call}")
     lines.append("")
 
     # Input parameters
@@ -304,6 +363,10 @@ def format_results(results, state):
 
     faculty_salary = sum(pi.base_salary / 9.0 * pi.summer_months for pi in state.pis)
     lines.append(f"  Faculty salary (year 1)      = {dollar(faculty_salary)}")
+    lines.append(f"  Number of graduate students   = {state.number_grads}")
+    lines.append(f"  Grad stipend (per student)   = {dollar(state.grad_stipend_per)}")
+    lines.append(f"  Grad fees (per student)      = {dollar(state.grad_fees_per)}")
+    lines.append(f"  Grad insurance (per student) = {dollar(state.grad_ins_per)}")
     lines.append(f"  Graduate stipend             = {dollar(state.number_grads * state.grad_stipend_per)}")
     lines.append(f"  Graduate tuition + fees      = {dollar(state.number_grads * state.grad_fees_per)}")
     lines.append(f"  Graduate health insurance    = {dollar(state.number_grads * state.grad_ins_per)}")
@@ -320,7 +383,20 @@ def format_results(results, state):
     lines.append(f"  Inflation rate               = {state.inflation}")
     lines.append("")
 
-    # Budget table
+    lines.extend(format_nsf_table(results, state))
+    lines.extend(format_nasa_table(results, state))
+
+    return lines
+
+
+def _budget_col_headers(state):
+    """Return column header strings for budget tables."""
+    return [f"Year {y+1}" for y in range(state.number_years)]
+
+
+def format_nsf_table(results, state):
+    """Format the NSF-style detailed budget table as a list of strings."""
+    lines = []
     details = results["details"]
     tdc = results["tdc"]
     indirect = results["indirect"]
@@ -352,7 +428,7 @@ def format_results(results, state):
         cols = "".join(f"{dollar(v):>{col_w}}" for v in values)
         return f"{label:>{label_w}}{cols}{dollar(total):>{col_w}}"
 
-    col_headers = [f"Year {y+1}" for y in range(number_years)]
+    col_headers = _budget_col_headers(state)
     header = (f"{'':>{label_w}}"
               + "".join(f"{h:>{col_w}}" for h in col_headers)
               + f"{'Total':>{col_w}}")
@@ -374,7 +450,23 @@ def format_results(results, state):
     lines.append(table_row("Total Direct", tdc, sum(tdc)))
     lines.append(table_row("Total Budget", yearly, sum(yearly)))
 
-    # NASA R&R format
+    return lines
+
+
+def format_nasa_table(results, state):
+    """Format the NASA R&R budget table as a list of strings."""
+    lines = []
+    details = results["details"]
+    number_years = state.number_years
+    col_w = 16
+
+    col_headers = _budget_col_headers(state)
+    # Use wider label column for NASA format
+    label_w = 32
+    header = (f"{'':>{label_w}}"
+              + "".join(f"{h:>{col_w}}" for h in col_headers)
+              + f"{'Total':>{col_w}}")
+
     lines.append("")
     lines.append("=" * len(header))
     lines.append("NASA R&R Budget Format")
@@ -437,7 +529,7 @@ def format_results(results, state):
     return lines
 
 
-def write_log(lines, path=LOG_FILE):
+def write_log(lines, path="budget.log"):
     with open(path, "a") as f:
         f.write("=" * 60 + "\n")
         for line in lines:
@@ -497,20 +589,21 @@ def render_main_menu(stdscr, state, selected):
     value_col = 30
     row = 2
 
-    # Project dates (always first, above separator)
-    label, summary_fn = MENU_ITEMS[0]
-    prefix = "> " if selected == 0 else "  "
-    attr = curses.A_REVERSE if selected == 0 else 0
-    safe_addnstr(stdscr, row, label_col - 2, prefix + label, value_col - label_col + 2, attr)
-    safe_addnstr(stdscr, row, value_col, summary_fn(state), width - value_col - 2, attr)
-    row += 1
+    # Agency & Program and Project Dates (above separator)
+    for i in range(2):
+        label, summary_fn = MENU_ITEMS[i]
+        prefix = "> " if selected == i else "  "
+        attr = curses.A_REVERSE if selected == i else 0
+        safe_addnstr(stdscr, row, label_col - 2, prefix + label, value_col - label_col + 2, attr)
+        safe_addnstr(stdscr, row, value_col, summary_fn(state), width - value_col - 2, attr)
+        row += 1
 
     # Separator
     safe_addstr(stdscr, row, label_col - 2, "─" * (width - 4))
     row += 1
 
-    # Categories 1-8
-    for i in range(1, len(MENU_ITEMS)):
+    # Categories 2-9
+    for i in range(2, len(MENU_ITEMS)):
         label, summary_fn = MENU_ITEMS[i]
         prefix = "> " if selected == i else "  "
         attr = curses.A_REVERSE if selected == i else 0
@@ -536,7 +629,7 @@ def render_main_menu(stdscr, state, selected):
         safe_addstr(stdscr, row, label_col - 2, "Est. Total: ---")
 
     # Status bar
-    draw_status_bar(stdscr, "↑↓ Navigate   Enter: Edit   F: Finalize   Q: Quit", height, width)
+    draw_status_bar(stdscr, "↑↓ Navigate  Enter: Edit  V: Summary  F: Finalize  L: Load  Q: Quit", height, width)
 
     stdscr.refresh()
 
@@ -898,6 +991,7 @@ def show_results(stdscr, lines, state):
     scroll = 0
     visible = height - 3  # title + status bar
     saved = False
+    saved_path = ""
 
     while True:
         stdscr.clear()
@@ -910,7 +1004,7 @@ def show_results(stdscr, lines, state):
 
         status = "↑↓ Scroll   S: Save to log   Esc/Q: Return"
         if saved:
-            status = f"Saved to {LOG_FILE}!   " + status
+            status = f"Saved to {saved_path}!   " + status
         draw_status_bar(stdscr, status, height, width)
 
         curses.curs_set(0)
@@ -929,8 +1023,67 @@ def show_results(stdscr, lines, state):
         elif key == curses.KEY_NPAGE:
             scroll = min(max(0, len(lines) - visible), scroll + visible)
         elif key in (ord('s'), ord('S')):
-            write_log(lines)
+            log_path = generate_log_filename(state.agency, state.program_call)
+            write_log(lines, path=log_path)
             saved = True
+            saved_path = log_path
+
+
+# ── Summary viewer ─────────────────────────────────────────────────
+
+
+def show_summary(stdscr, state):
+    """Toggle between NSF and NASA budget summary views. Read-only."""
+    try:
+        results = state.finalize()
+    except Exception as e:
+        stdscr.clear()
+        safe_addstr(stdscr, 1, 2, f"Error: {e}", curses.A_BOLD)
+        safe_addstr(stdscr, 3, 2, "Press any key to return.")
+        stdscr.getch()
+        return
+
+    nsf_lines = format_nsf_table(results, state)
+    nasa_lines = format_nasa_table(results, state)
+    views = [("NSF Budget Summary", nsf_lines), ("NASA R&R Budget Summary", nasa_lines)]
+    view_idx = 0
+
+    height, width = stdscr.getmaxyx()
+    scroll = 0
+    visible = height - 3
+
+    while True:
+        title, lines = views[view_idx]
+        stdscr.clear()
+        draw_title_bar(stdscr, title, width)
+
+        for i in range(visible):
+            line_idx = scroll + i
+            if line_idx < len(lines):
+                safe_addnstr(stdscr, i + 1, 1, lines[line_idx], width - 2)
+
+        draw_status_bar(stdscr, "↑↓ Scroll   Tab: Toggle NSF/NASA   Esc/Q: Return", height, width)
+        curses.curs_set(0)
+        stdscr.refresh()
+
+        key = stdscr.getch()
+
+        if is_escape(stdscr, key) or key in (ord('q'), ord('Q')):
+            return
+        elif key == 9:  # Tab
+            view_idx = (view_idx + 1) % len(views)
+            scroll = 0
+        elif key == curses.KEY_UP:
+            scroll = max(0, scroll - 1)
+        elif key == curses.KEY_DOWN:
+            scroll = min(max(0, len(lines) - visible), scroll + 1)
+        elif key == curses.KEY_PPAGE:
+            scroll = max(0, scroll - visible)
+        elif key == curses.KEY_NPAGE:
+            scroll = min(max(0, len(lines) - visible), scroll + visible)
+        elif key == curses.KEY_RESIZE:
+            height, width = stdscr.getmaxyx()
+            visible = height - 3
 
 
 # ── Confirmation dialog ─────────────────────────────────────────────
@@ -958,27 +1111,31 @@ def confirm_quit(stdscr):
 
 # Field definitions for simple categories
 SIMPLE_CATEGORIES = {
-    2: ("Graduate Students", [
+    0: ("Agency & Program", [
+        ("Funding agency", "agency"),
+        ("Program call", "program_call"),
+    ]),
+    3: ("Graduate Students", [
         ("Number of graduate students", "number_grads"),
         ("Annual stipend (per student)", "grad_stipend_per"),
         ("Tuition + fees (per student)", "grad_fees_per"),
         ("Health insurance (per student)", "grad_ins_per"),
     ]),
-    3: ("Undergraduate Students", [
+    4: ("Undergraduate Students", [
         ("Undergraduate salary", "undergrad_salary"),
     ]),
-    4: ("Postdocs", [
+    5: ("Postdocs", [
         ("Postdoc salary", "postdoc_salary"),
         ("Postdoc health insurance", "postdoc_health"),
     ]),
-    5: ("Travel & Publication", [
+    6: ("Travel & Publication", [
         ("Yearly travel costs", "travel"),
         ("Yearly publication costs", "pub_costs"),
     ]),
-    6: ("Equipment", [
+    7: ("Equipment", [
         ("Yearly equipment costs", "equipment"),
     ]),
-    8: ("Rates & Inflation", [
+    9: ("Rates & Inflation", [
         ("Indirect (F&A) rate", "indirect_rate"),
         ("Fringe (payroll tax) rate", "fringe_rate"),
         ("Full-time fringe rate", "fulltime_fringe"),
@@ -1001,11 +1158,11 @@ def set_state_attr(state, fname, value):
 
 def dispatch_edit(stdscr, state, idx):
     """Open the appropriate editor for menu item idx."""
-    if idx == 0:
+    if idx == 1:
         edit_project_dates(stdscr, state)
-    elif idx == 1:
+    elif idx == 2:
         edit_senior_investigators(stdscr, state)
-    elif idx == 7:
+    elif idx == 8:
         edit_subawards(stdscr, state)
     elif idx in SIMPLE_CATEGORIES:
         title, fields = SIMPLE_CATEGORIES[idx]
@@ -1016,8 +1173,189 @@ def dispatch_edit(stdscr, state, idx):
                 ok, parsed, _ = state.validate_field(title.lower(), fname, val_str)
                 if ok:
                     setattr(state, fname, parsed)
-            if idx == 2:  # grad count may have changed
+            if idx == 3:  # grad count may have changed
                 pass  # number_grads is already set via setattr
+
+
+# ── Log parsing and load screen ─────────────────────────────────────
+
+
+def parse_log_file(path):
+    """Parse a budget log file and return a BudgetState, or raise on failure."""
+    with open(path) as f:
+        content = f.read()
+
+    state = BudgetState()
+
+    def extract(label):
+        """Find '  label = value' in content and return value string."""
+        for line in content.split("\n"):
+            stripped = line.strip()
+            if stripped.startswith(label) and "=" in stripped:
+                _, _, val = stripped.partition("=")
+                return val.strip()
+        return None
+
+    def parse_dollar(s):
+        """Parse '$1,234.56' to float."""
+        if s is None:
+            return 0.0
+        return float(s.replace("$", "").replace(",", ""))
+
+    # Agency & program
+    v = extract("Agency")
+    if v:
+        state.agency = v
+    v = extract("Program call")
+    if v:
+        state.program_call = v
+
+    # Dates
+    v = extract("Project start")
+    if v:
+        state.use_dates = True
+        state.start_date = datetime.strptime(v, "%Y-%m-%d").date()
+    v = extract("Project end")
+    if v:
+        state.end_date = datetime.strptime(v, "%Y-%m-%d").date()
+
+    # Number of years
+    v = extract("Number of years")
+    if v:
+        state.number_years = int(v)
+
+    # Faculty / PIs
+    v = extract("Number of faculty")
+    if v:
+        num_pis = int(v)
+        state.pis = []
+        for i in range(num_pis):
+            pattern = (rf"PI {i+1}: base 9-month salary = \$([0-9,.]+),"
+                       rf" summer months = ([0-9.]+)")
+            m = re.search(pattern, content)
+            if m:
+                base = int(float(m.group(1).replace(",", "")))
+                months = float(m.group(2))
+                state.pis.append(PIInfo(base_salary=base, summer_months=months))
+            else:
+                state.pis.append(PIInfo())
+
+    # Graduate students (per-student values)
+    v = extract("Number of graduate students")
+    if v:
+        state.number_grads = int(v)
+    v = extract("Grad stipend (per student)")
+    if v:
+        state.grad_stipend_per = int(parse_dollar(v))
+    v = extract("Grad fees (per student)")
+    if v:
+        state.grad_fees_per = parse_dollar(v)
+    v = extract("Grad insurance (per student)")
+    if v:
+        state.grad_ins_per = parse_dollar(v)
+
+    # Other fields
+    v = extract("Undergraduate salary")
+    if v:
+        state.undergrad_salary = int(parse_dollar(v))
+    v = extract("Postdoc salary")
+    if v:
+        state.postdoc_salary = int(parse_dollar(v))
+    v = extract("Postdoc health")
+    if v:
+        state.postdoc_health = int(parse_dollar(v))
+    v = extract("Equipment")
+    if v:
+        state.equipment = int(parse_dollar(v))
+    v = extract("Travel")
+    if v:
+        state.travel = int(parse_dollar(v))
+    v = extract("Publication costs")
+    if v:
+        state.pub_costs = int(parse_dollar(v))
+
+    # Subawards — logged as a Python list: [0, 0, 0]
+    m = re.search(r"Subawards\s*=\s*\[([^\]]*)\]", content)
+    if m:
+        state.subaward = [int(x.strip()) for x in m.group(1).split(",") if x.strip()]
+    else:
+        state.subaward = [0] * state.number_years
+
+    # Rates
+    v = extract("Indirect rate")
+    if v:
+        state.indirect_rate = float(v)
+    v = extract("Fringe (payroll tax) rate")
+    if v:
+        state.fringe_rate = float(v)
+    v = extract("Full-time fringe rate")
+    if v:
+        state.fulltime_fringe = float(v)
+    v = extract("Inflation rate")
+    if v:
+        state.inflation = float(v)
+
+    return state
+
+
+def load_budget_screen(stdscr, current_state):
+    """Show list of .log files, let user pick one, parse and return BudgetState."""
+    height, width = stdscr.getmaxyx()
+
+    log_files = sorted(glob.glob("*.log"), key=os.path.getmtime, reverse=True)
+    if not log_files:
+        stdscr.clear()
+        draw_title_bar(stdscr, "Load Previous Budget", width)
+        safe_addstr(stdscr, 2, 4, "No .log files found in current directory.")
+        safe_addstr(stdscr, 4, 4, "Press any key to return.")
+        stdscr.getch()
+        return None
+
+    selected = 0
+    scroll = 0
+    visible = height - 5
+
+    while True:
+        stdscr.clear()
+        draw_title_bar(stdscr, "Load Previous Budget", width)
+
+        for i in range(visible):
+            idx = scroll + i
+            if idx >= len(log_files):
+                break
+            row = i + 2
+            prefix = "> " if idx == selected else "  "
+            attr = curses.A_REVERSE if idx == selected else 0
+            # Show filename and modification time
+            mtime = datetime.fromtimestamp(os.path.getmtime(log_files[idx]))
+            display = (f"{prefix}{log_files[idx]}"
+                       f"  ({mtime.strftime('%Y-%m-%d %H:%M')})")
+            safe_addnstr(stdscr, row, 2, display, width - 4, attr)
+
+        draw_status_bar(stdscr, "↑↓ Select   Enter: Load   Esc: Cancel", height, width)
+        curses.curs_set(0)
+        stdscr.refresh()
+
+        key = stdscr.getch()
+
+        if is_escape(stdscr, key):
+            return None
+        elif key == curses.KEY_UP:
+            selected = max(0, selected - 1)
+            if selected < scroll:
+                scroll = selected
+        elif key == curses.KEY_DOWN:
+            selected = min(len(log_files) - 1, selected + 1)
+            if selected >= scroll + visible:
+                scroll = selected - visible + 1
+        elif key in (curses.KEY_ENTER, 10, 13):
+            try:
+                loaded = parse_log_file(log_files[selected])
+                return loaded
+            except Exception as e:
+                safe_addstr(stdscr, height - 3, 4, f"Error loading: {e}", curses.A_BOLD)
+                stdscr.getch()
+                return None
 
 
 # ── Main entry point ────────────────────────────────────────────────
@@ -1081,6 +1419,16 @@ def main(stdscr):
                 safe_addstr(stdscr, 1, 2, f"Error: {e}", curses.A_BOLD)
                 safe_addstr(stdscr, 3, 2, "Press any key to return.")
                 stdscr.getch()
+        elif key in (ord('v'), ord('V')):
+            show_summary(stdscr, state)
+        elif key in (ord('l'), ord('L')):
+            loaded_state = load_budget_screen(stdscr, state)
+            if loaded_state is not None:
+                # Copy all fields from loaded state into current state
+                for attr in vars(loaded_state):
+                    setattr(state, attr, getattr(loaded_state, attr))
+                state._dirty = True
+                state.recompute_estimate()
         elif key in (ord('q'), ord('Q')):
             if state._dirty:
                 if not confirm_quit(stdscr):
