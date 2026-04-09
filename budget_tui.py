@@ -1139,22 +1139,22 @@ SIMPLE_CATEGORIES = {
     3: ("Graduate Students", [
         ("Number of graduate students", "number_grads"),
         ("Annual stipend (per student)", "grad_stipend_per"),
-        ("Tuition + fees (per student)", "grad_fees_per"),
-        ("Health insurance (per student)", "grad_ins_per"),
+        ("Annual tuition + fees (per student)", "grad_fees_per"),
+        ("Annual health insurance (per student)", "grad_ins_per"),
     ]),
     4: ("Undergraduate Students", [
-        ("Undergraduate salary", "undergrad_salary"),
+        ("Annual undergraduate salary", "undergrad_salary"),
     ]),
     5: ("Postdocs", [
-        ("Postdoc salary", "postdoc_salary"),
-        ("Postdoc health insurance", "postdoc_health"),
+        ("Annual postdoc salary", "postdoc_salary"),
+        ("Annual postdoc health insurance", "postdoc_health"),
     ]),
     6: ("Travel & Publication", [
-        ("Yearly travel costs", "travel"),
-        ("Yearly publication costs", "pub_costs"),
+        ("Travel per period", "travel"),
+        ("Publication costs per period", "pub_costs"),
     ]),
     7: ("Equipment", [
-        ("Yearly equipment costs", "equipment"),
+        ("Equipment per period", "equipment"),
     ]),
     9: ("Rates & Inflation", [
         ("Indirect (F&A) rate", "indirect_rate"),

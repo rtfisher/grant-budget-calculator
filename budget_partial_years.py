@@ -141,7 +141,9 @@ def calculate_budget(number_years, faculty_salary, grad_salary, grad_fees, grad_
             cap = SUBAWARD_INDIRECT_CAP
 
         # Scale annual costs by period fraction
-        faculty_salary_period = faculty_salary * frac
+        # Faculty salary is already scoped to N summer months (not an annual
+        # rate), so it must not be prorated by the period day-fraction.
+        faculty_salary_period = faculty_salary
         grad_salary_period = grad_salary * frac
         grad_fees_period = grad_fees * frac
         grad_ins_period = grad_ins * frac

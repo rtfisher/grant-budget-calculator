@@ -223,13 +223,15 @@ class TestCalculateBudgetPartialPeriods:
             assert r_frac[key][0] == pytest.approx(r_plain[key][0], rel=0.001)
 
     def test_partial_period_costs_scaled(self):
-        """A 182-day period should scale salary-type costs by 182/365.25."""
+        """A 182-day period should scale annual costs by 182/365.25,
+        but faculty salary is already scoped to summer months (not prorated)."""
         frac = self.HALF_YEAR_FRAC
         r = calculate_budget(
             number_years=1, **self.BASE_INPUTS,
             subaward=[0], period_fractions=[self._half_year_pf()])
         d = r["details"][0]
-        assert d["faculty_salary"] == pytest.approx(self.BASE_INPUTS["faculty_salary"] * frac)
+        # Faculty salary is NOT prorated — it's already scoped to N summer months
+        assert d["faculty_salary"] == pytest.approx(self.BASE_INPUTS["faculty_salary"])
         assert d["grad_salary"] == pytest.approx(self.BASE_INPUTS["grad_salary"] * frac)
         assert d["postdoc_salary"] == pytest.approx(self.BASE_INPUTS["postdoc_salary"] * frac)
 
@@ -273,7 +275,7 @@ class TestCalculateBudgetPartialPeriods:
         d = r["details"][0]
         assert d["grad_fringe"] == pytest.approx(0.0)
         expected_fringe = ((self.BASE_INPUTS["undergrad_salary"] * frac
-                            + self.BASE_INPUTS["faculty_salary"] * frac) * self.BASE_INPUTS["fringe_rate"]
+                            + self.BASE_INPUTS["faculty_salary"]) * self.BASE_INPUTS["fringe_rate"]
                            + self.BASE_INPUTS["fulltime_fringe"] * self.BASE_INPUTS["postdoc_salary"] * frac)
         assert d["total_fringe"] == pytest.approx(expected_fringe)
 

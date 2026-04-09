@@ -36,7 +36,7 @@ class TestBudgetStateInit:
         assert state.grad_ins_per == 1232.0
         assert state.undergrad_salary == 0
         assert state.postdoc_salary == 0
-        assert state.postdoc_health == 0
+        assert state.postdoc_health == 2465
         assert state.travel == 0
         assert state.pub_costs == 0
         assert state.equipment == 0

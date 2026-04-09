@@ -16,7 +16,7 @@ grad_fees           = 14500
 grad_insurance      = 1232
 undergrad_salary    = 0
 postdoc_salary      = 0
-postdoc_health      = 0
+postdoc_health      = 2465
 
 # Other defaults
 equipment           = 0

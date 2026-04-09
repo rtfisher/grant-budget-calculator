@@ -62,8 +62,10 @@ NSF-style grant budget calculator. The curses-based TUI (`budget_tui.py`) is the
 ### Partial-period scaling (budget_partial_years.py)
 
 When `period_fractions` is provided to `calculate_budget`:
-- All annual costs (salaries, stipends, fees, health insurance) are scaled by `frac = days / 365.25`.
+- Annual costs (grad/postdoc/undergrad salaries, stipends, fees, health insurance) are scaled by `frac = days / 365.25`.
+- Faculty salary is NOT scaled — it is already scoped to N summer months (not an annual rate).
 - Equipment, travel, publication costs, and subawards are NOT scaled (fixed per-period values).
+- TUI labels distinguish "Annual ..." (prorated) from "... per period" (fixed).
 - Grad summer fraction = `summer_months / 12.0` per period (replaces hardcoded 0.25).
 - Inflation compounds as `(1 + r) ^ frac` for fractional periods; uses exact `(1 + r)` for full years to avoid float divergence.
 - Subaward indirect cap prorated to `$25k x frac`.

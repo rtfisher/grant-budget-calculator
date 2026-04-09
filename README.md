@@ -77,7 +77,7 @@ Consult with your institutional office of research administration for current ra
 
 - Specify a **project start date** and **end date** (any dates -- no restriction to 1st of month).
 - Budget periods are split at anniversary boundaries of the start date. The last period may be shorter.
-- Salaries, stipends, fees, and health insurance are prorated by `days / 365.25` for each period. Equipment, travel, publication costs, and subaward values are fixed per-period and not scaled.
+- Grad/postdoc/undergrad salaries, stipends, fees, and health insurance are prorated by `days / 365.25` for each period. Faculty salary is not prorated (it is already scoped to the requested number of summer months). Equipment, travel, publication costs, and subaward values are fixed per-period and not scaled.
 - **Summer months** (June, July, August) for graduate FICA are computed from the actual calendar overlap of each period, rather than using a hardcoded 3/12 fraction.
 - Inflation compounds as `(1 + r) ^ frac` for fractional periods.
 - The subaward indirect cap ($25k) is prorated for fractional periods.
