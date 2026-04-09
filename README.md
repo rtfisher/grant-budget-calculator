@@ -40,7 +40,7 @@ The TUI supports partial budget periods via the Project Dates menu item (Tab tog
 
 ### Agency & Program
 
-The first menu item lets you set the funding agency (e.g., "nasa", "nsf") and program call (e.g., "compass", "aag"). These are combined with today's date to generate unique log filenames like `nasa_compass_040826.log`. Duplicate filenames auto-increment: `nasa_compass_040826_v2.log`, etc.
+The first menu item lets you set the funding agency (e.g., "nasa", "nsf") and program call (e.g., "atp", "aag"). These are combined with today's date to generate unique log filenames like `nasa_atp_040826.log`. Duplicate filenames auto-increment: `nasa_atp_040826_v2.log`, etc.
 
 ### Loading a Previous Budget
 
@@ -92,7 +92,7 @@ The calculator produces two budget tables:
 
 ## Logging
 
-Each save creates a uniquely named log file (e.g., `nasa_compass_040826.log`) containing:
+Each save creates a uniquely named log file (e.g., `nsf_aag_040826.log`) containing:
 - Agency and program call
 - All input parameters as entered (including per-student grad values)
 - Per-PI base salary and summer months (for full reproducibility)
